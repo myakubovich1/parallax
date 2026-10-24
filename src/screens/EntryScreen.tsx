@@ -37,13 +37,18 @@ export const EntryScreen = forwardRef<HTMLTextAreaElement, Props>(function Entry
   const running = gen.status === 'running';
   return (
     <main className="entry" id="main">
+      <div className="entry-index instrument-label" aria-hidden="true">
+        <span>Parallax / A field guide to ideas</span>
+        <span>Observe · Adjust · Understand</span>
+      </div>
       <div className="entry-grid">
         <section className="entry-left" aria-labelledby="entry-title">
-          <p className="instrument-label kicker"><span className="live-dot on" aria-hidden="true" /> Demo mode · three authored lessons</p>
-          <h1 id="entry-title">See what the equation means.</h1>
-          <p className="entry-copy">Bring a formula or a question. Explore the idea behind it.</p>
+          <p className="instrument-label kicker"><span className="live-dot on" aria-hidden="true" /> The interactive science lab</p>
+          <h1 id="entry-title"><span>Equations.</span><br />Explained.</h1>
+          <p className="entry-copy">Change a variable. See the whole idea.</p>
 
           <form className="entry-form" onSubmit={(e) => { e.preventDefault(); onCreate(); }} noValidate>
+            <div className="input-strip instrument-label"><span>01 / Your experiment</span><span aria-hidden="true">↳</span></div>
             <ConceptInput ref={inputRef} value={prompt} onChange={onPrompt} onSubmit={onCreate} error={error} disabled={running} />
             <div className="examples">
               <span className="instrument-label">Try</span>
@@ -65,13 +70,18 @@ export const EntryScreen = forwardRef<HTMLTextAreaElement, Props>(function Entry
         </section>
 
         <section className="entry-right" aria-label="Live preview: wave interference">
+          <div className="preview-id instrument-label"><span>02 / In the field</span><span>Wave interference</span></div>
           <WavePreview onOpen={(params) => onOpenLesson('wave-interference', params)} />
+          <div className="preview-note">
+            <span className="dither-swatch" aria-hidden="true" />
+            <p><span className="instrument-label">Small change. Different picture.</span><br />Move the phase slider to see two waves become one.</p>
+            <span className="preview-note-arrow" aria-hidden="true"><Icon name="send" size={28} /></span>
+          </div>
         </section>
       </div>
       <footer className="entry-foot">
-        <span className="instrument-label">Parallax</span>
-        <span>Turn ideas into intuition.</span>
-        <span className="muted small">Lessons here are authored demos, not live AI generations.</span>
+        <span className="instrument-label">Less memorizing. More understanding.</span>
+        <span className="muted small">Custom equations use AI. Example lessons are authored.</span>
       </footer>
     </main>
   );

@@ -6,3 +6,8 @@ verify/screens
 # Third-party reference artwork stays local
 Image references/
 *.tsbuildinfo
+
+# Credentials must never enter Git or the browser bundle
+.env
+.env.*
+!.env.example

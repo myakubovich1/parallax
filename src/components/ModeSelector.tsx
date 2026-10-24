@@ -14,7 +14,7 @@ export function ModeSelector({ value, onChange, compact = false, name = 'mode' }
       <legend className={compact ? 'sr-only' : 'field-label'}>Learning mode</legend>
       <div className="mode-options">
         {MODES.map((m) => (
-          <label key={m.id} className={`mode-option ${value === m.id ? 'selected' : ''}`}>
+          <label key={m.id} className={`mode-option ${value === m.id ? 'selected' : ''}`} title={m.desc}>
             <input type="radio" name={name} value={m.id} checked={value === m.id} onChange={() => onChange(m.id)} />
             <span className="mode-name">{m.label}</span>
             {!compact && <span className="mode-desc">{m.desc}</span>}

@@ -2,15 +2,15 @@ import type { TermTone } from '../lib/lessons/types';
 
 /** Mirrors the CSS tokens for canvas/SVG drawing. */
 export const C = {
-  bg: '#080A0D',
-  panel: '#101319',
-  text: '#EEF0FA',
-  dim: '#ADB4C7',
-  rule: '#353B50',
-  lime: '#CBFF69',
-  violet: '#C6BEFF',
-  ice: '#A9E7FF',
-  amber: '#FFC46B',
+  bg: '#080D0B',
+  panel: '#0D1511',
+  text: '#E0EBE0',
+  dim: '#A3B2A6',
+  rule: '#354C3D',
+  lime: '#C3F86B',
+  violet: '#C3C0F2',
+  ice: '#B9E1CF',
+  amber: '#EACB8D',
 };
 
 export const TONE_COLOR: Record<TermTone, string> = {

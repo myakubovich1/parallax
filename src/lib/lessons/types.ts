@@ -105,13 +105,13 @@ export interface LessonSpec {
   examplePrompt: string;
 }
 
-/** Data-only shape a live generator would return (not used in demo mode). */
+/** Data-only lesson returned by the server; validated before rendering. */
 export interface GeneratedLessonSpec {
   title: string;
-  equation?: string;
+  equation: string;
   explanation: string[];
   /** Untrusted. Rendered only inside a sandboxed iframe. */
-  stageHtml?: string;
+  stageHtml: string;
   params: Omit<ParamDef, 'term'>[];
   assumptions: string[];
 }
