@@ -1,0 +1,7 @@
+node_modules
+dist
+.DS_Store
+*.local
+verify/screens
+# Third-party reference artwork stays local
+Image references/
