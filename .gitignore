@@ -5,3 +5,4 @@ dist
 verify/screens
 # Third-party reference artwork stays local
 Image references/
+*.tsbuildinfo
