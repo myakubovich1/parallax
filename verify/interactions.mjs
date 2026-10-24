@@ -1,15 +1,18 @@
 // End-to-end checks of the behaviours listed in the brief. Run with the dev server on :5199.
 import { chromium } from 'playwright';
 const base = process.argv[2] ?? 'http://localhost:5199/';
-const browser = await chromium.launch();
+const browser = await chromium.launch({ executablePath: process.env.PARALLAX_CHROMIUM_PATH || undefined });
 const results = [];
 const errors = [];
+let expectedMissingKey = false;
 const check = (name, ok, detail = '') => results.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
 const newPage = async (opts = {}) => {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, ...opts });
   const p = await ctx.newPage();
   p.on('pageerror', (e) => errors.push(e.message));
-  p.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  p.on('console', (m) => {
+    if (m.type() === 'error' && !(expectedMissingKey && m.text().includes('503'))) errors.push(m.text());
+  });
   return p;
 };
 const val = (p, sel) => p.$eval(sel, (e) => e.value);
@@ -24,10 +27,14 @@ check('Empty submission shows inline feedback', await p.isVisible('#concept-erro
 await p.click('.examples .chip:has-text("Gravitational attraction")');
 check('Example button fills input', (await val(p, '#concept')).includes('F = G'));
 check('Default mode is Explain & explore', await p.isChecked('input[name=mode][value=explore]'));
+expectedMissingKey = true;
+await p.route('**/api/generate', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Configure PARALLAX_GEMINI_API_KEY securely in environment settings.' }) }));
 await p.fill('#concept', 'Explain photosynthesis');
 await p.click('button:has-text("Create experiment")');
-await p.waitForSelector('.gen-status.unsupported');
-check('Unsupported input explains demo limits', (await text(p, '.gen-status.unsupported')).includes('isn’t connected'));
+await p.waitForSelector('.gen-status.failed');
+check('Custom input explains missing server configuration', (await text(p, '.gen-status.failed')).includes('Configure PARALLAX_GEMINI_API_KEY'));
+await p.unroute('**/api/generate');
+expectedMissingKey = false;
 await p.fill('#concept', 'Why does gradient descent sometimes overshoot?');
 await p.focus('#concept');
 await p.keyboard.press('Control+Enter');
@@ -170,3 +177,4 @@ console.log(results.join('\n'));
 console.log(`\n${results.filter((r) => r.startsWith('PASS')).length}/${results.length} passed`);
 console.log('console/page errors:', errors.length ? errors : 'none');
 await browser.close();
+if (results.some(r => r.startsWith('FAIL')) || errors.length) process.exitCode = 1;

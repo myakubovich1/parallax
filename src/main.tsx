@@ -1,3 +1,4 @@
+import '@fontsource/vt323/400.css';
 import '@fontsource/space-grotesk/500.css';
 import '@fontsource/space-grotesk/600.css';
 import '@fontsource/ibm-plex-sans/400.css';

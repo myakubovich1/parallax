@@ -3,16 +3,17 @@ import { SavedDialog } from './components/SavedDialog';
 import { SettingsDialog } from './components/SettingsDialog';
 import { TopBar } from './components/TopBar';
 import { GenerationError } from './lib/generation/adapter';
-import { demoAdapter } from './lib/generation/demoAdapter';
+import { liveAdapter } from './lib/generation/liveAdapter';
+import { GeneratedWorkspace } from './workspace/GeneratedWorkspace';
 import { LESSON_BY_ID, defaultParams } from './lib/lessons/registry';
-import type { ConceptId, LearningMode, LessonSpec, Params } from './lib/lessons/types';
+import type { ConceptId, GeneratedLessonSpec, LearningMode, LessonSpec, Params } from './lib/lessons/types';
 import { loadSaved, writeSaved, type SavedExperiment } from './lib/storage';
 import { EntryScreen, type GenState } from './screens/EntryScreen';
 import { LessonWorkspace } from './workspace/LessonWorkspace';
 
-type Screen = { kind: 'entry' } | { kind: 'lesson'; lesson: LessonSpec; mode: LearningMode; params: Params; key: number };
+type Screen = { kind: 'generated'; lesson: GeneratedLessonSpec } | { kind: 'entry' } | { kind: 'lesson'; lesson: LessonSpec; mode: LearningMode; params: Params; key: number };
 
-const adapter = demoAdapter;
+const adapter = liveAdapter;
 /** Progress UI appears only if a request takes longer than this, so instant demo lookups don't flash. */
 const PROGRESS_DELAY_MS = 150;
 
@@ -87,6 +88,11 @@ export default function App() {
       if (res.status === 'ready') {
         setGen({ status: 'idle' });
         openLesson(res.lesson.id, mode);
+      } else if (res.status === 'generated') {
+        setGen({ status: 'idle' });
+        setScreen({ kind: 'generated', lesson: res.lesson });
+        if (location.hash) history.pushState(null, '', location.pathname + location.search);
+        window.scrollTo(0, 0);
       } else setGen({ status: 'unsupported', prompt: text });
     } catch (e) {
       if (ac.signal.aborted || (e instanceof DOMException && e.name === 'AbortError')) {
@@ -134,6 +140,8 @@ export default function App() {
           onRetry={create}
           onOpenLesson={(id, params) => { setGen({ status: 'idle' }); openLesson(id, mode, params); }}
         />
+      ) : screen.kind === 'generated' ? (
+        <GeneratedWorkspace lesson={screen.lesson} onExit={() => goEntry()} />
       ) : (
         <LessonWorkspace
           key={screen.key}
