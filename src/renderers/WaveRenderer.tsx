@@ -73,7 +73,7 @@ export default function WaveRenderer(props: RendererProps) {
 }
 
 /** Draws text with _X subscripts (e.g. A_R) as real subscripts. Returns the width. */
-function fillMath(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, measureOnly = false): number {
+export function fillMath(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, measureOnly = false): number {
   const size = parseFloat(ctx.font) || 12;
   const base = ctx.font;
   let w = 0;

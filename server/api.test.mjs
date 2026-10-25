@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { createApi } from './api.mjs';
 import { validateLesson } from './lesson.mjs';
+import { spring as experiment } from '../verify/fixtures/experiments.mjs';
 
 const lesson = { title: 'Hooke’s law', equation: 'F = -kx', explanation: ['Force is proportional to displacement.'],
   stageHtml: '<p id="force"></p><script>addEventListener("message",e=>{if(e.data.type==="params")document.querySelector("#force").textContent=-2*e.data.params.x})</script>',
@@ -32,13 +33,13 @@ test('generated equations use server authentication and return only validated le
     const body = JSON.parse(options.body);
     assert.equal(body.response_format.json_schema.strict, true);
     assert.deepEqual(JSON.parse(body.messages[1].content), { prompt: request.prompt, learningMode: request.mode });
-    return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(lesson) } }] });
+    return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(experiment) } }] });
   } });
   const response = await post(base, request);
   assert.equal(response.status, 200);
   const text = await response.text();
   assert.equal(text.includes('test-only-placeholder'), false);
-  assert.deepEqual(JSON.parse(text), { lesson });
+  assert.deepEqual(JSON.parse(text), { lesson: experiment });
 });
 
 test('bad requests and cross-origin calls are rejected before provider access', async t => {
@@ -101,11 +102,11 @@ test('Gemini sends key only in server header and validates structured output', a
     assert.equal(body.generationConfig.responseMimeType, 'application/json');
     assert.deepEqual(body.generationConfig.thinkingConfig, { thinkingLevel: 'low' });
     assert.ok(body.generationConfig.responseJsonSchema.properties.stageHtml);
-    return Response.json({ candidates: [{ finishReason: 'STOP', content: { parts: [{ thought: true, text: 'not output' }, { text: JSON.stringify(lesson) }] } }] });
+    return Response.json({ candidates: [{ finishReason: 'STOP', content: { parts: [{ thought: true, text: 'not output' }, { text: JSON.stringify(experiment) }] } }] });
   } });
   const response = await post(base, request);
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { lesson });
+  assert.deepEqual(await response.json(), { lesson: experiment });
   assert.equal(calls, 1);
 });
 
@@ -122,7 +123,7 @@ test('Gemini quota, blocked and invalid output never fall back to a paid provide
     const text = await response.text();
     assert.equal(text.includes('private upstream details'), false);
     if (response.status === 429) assert.match(text, /free-tier quota/);
-    assert.equal(calls, 1);
+    assert.equal(calls, response.status === 429 ? 1 : 2);
   }
 });
 
@@ -131,4 +132,43 @@ test('unsupported provider and model are rejected before any network request', a
     const base = await serve(t, { getConfig: () => config, fetchImpl: () => assert.fail('No provider call') });
     assert.equal((await post(base, request)).status, 503);
   }
+});
+
+test('serverless pre-parsed body and x-forwarded-host are accepted', async () => {
+  const api = createApi({
+    getConfig: () => ({ PARALLAX_PROVIDER: 'openai', PARALLAX_API_KEY: 'test-only-placeholder' }),
+    fetchImpl: async () => Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(experiment) } }] }),
+  });
+  let status = 0;
+  let payload = '';
+  const req = {
+    url: '/api/generate',
+    method: 'POST',
+    headers: { 'content-type': 'application/json', host: 'internal.vercel.app', 'x-forwarded-host': 'parallax.vercel.app', origin: 'https://parallax.vercel.app' },
+    body: request,
+    socket: {},
+  };
+  const res = {
+    setHeader() {},
+    writeHead(code) { status = code; return this; },
+    end(chunk = '') { payload = chunk; this.writableEnded = true; },
+    on() {},
+    off() {},
+  };
+  await api(req, res);
+  assert.equal(status, 200);
+  assert.deepEqual(JSON.parse(payload), { lesson: experiment });
+});
+
+test('an invalid numerical lesson gets one same-provider repair attempt', async t => {
+  let calls = 0;
+  const broken = {...experiment, checks: [{...experiment.checks[0], expectedSI: 999}, experiment.checks[1]]};
+  const base = await serve(t, {getConfig: () => ({PARALLAX_PROVIDER: 'openai', PARALLAX_API_KEY: 'test-only-placeholder'}), fetchImpl: async (url, options) => {
+    assert.equal(url, 'https://api.openai.com/v1/chat/completions');
+    calls++;
+    if (calls === 2) assert.match(JSON.parse(options.body).messages[0].content, /last response failed/);
+    return Response.json({choices: [{finish_reason: 'stop', message: {content: JSON.stringify(calls === 1 ? broken : experiment)}}]});
+  }});
+  assert.equal((await post(base, request)).status, 200);
+  assert.equal(calls, 2);
 });

@@ -1,6 +1,6 @@
 # Parallax
 
-**Turn ideas into intuition.** Parallax turns formulas and scientific questions into interactive visual experiments. The learning loop is: ask → understand → predict → experiment → explain what changed.
+**Turn ideas into intuition.** Parallax turns formulas and scientific questions into interactive visual experiments. The learning loop is: ask → understand → predict → experiment → explain what changed!
 
 ## Run it
 
@@ -17,6 +17,7 @@ Browser checks can use system Chromium with `PARALLAX_CHROMIUM_PATH=/usr/bin/chr
 npm run verify       # 36 end-to-end interaction checks (Playwright)
 node verify/generation.mjs # custom equation UI checks (mocked provider)
 node verify/catalog.mjs    # all 47 new models, limits, aliases, save and zero API calls (dev server)
+node verify/experiments.mjs # rich lessons: units, modes, predictions, comparisons and visual fallback
 node verify/background.mjs # shared background, hover, motion preferences and responsive layouts
 npm run screens      # desktop / tablet / mobile screenshots → verify/screens/
 ```
@@ -51,19 +52,29 @@ The original three lessons retain their richer custom renderers, predictions and
 | Gravitational attraction | `F = G m₁ m₂ / r²`, SI units, lead spheres drawn to scale | SVG: draggable bodies, log-scaled force arrows, equipotential contours |
 | Gradient descent | `L(w) = (w − 3)²`, `w_next = w − η·2(w − 3)` | SVG: loss curve, tangent, step track, halts at \|w − 3\| > 12 |
 
-Prompts that do not match the library are sent to the same-origin `/api/generate` endpoint. The server calls Gemini by default, validates the structured lesson, and returns an equation, explanation, parameter controls and an interactive visualization. AI-generated content can be incorrect; each lesson displays its assumptions and limitations. Use Save experiment to keep a generated lesson and its current slider settings in Saved experiments. Saved lessons reopen without another API call, including after a browser refresh; storage is local to that browser.
+Prompts that do not match the library are sent to the same-origin `/api/generate` endpoint. The server calls the configured provider (OpenAI in `.env.example`), validates the structured lesson, and returns an equation, explanation, parameter controls and an interactive visualization. AI-generated content can be incorrect; each lesson displays its assumptions and limitations. Use Save experiment to keep a generated lesson and its current slider settings in Saved experiments. Saved lessons reopen without another API call, including after a browser refresh; storage is local to that browser.
 
 ## Secure live generation
 
+Generated lessons now use a versioned experiment contract: a learning objective, central intuition, misconception, connected equation terms, fixed constants, computed outputs, presets, a prediction/reveal challenge and a guided sequence. The UI provides Quick intuition, Explain & explore and Build from basics without regenerating the lesson. Symbol selection connects the equation, control and scene; pinned values support before/after comparisons. Shared comparison and spring renderers use the same colors and controls as the authored lessons, with an optional graph and readable compact views.
+
+The shared arithmetic engine interprets bounded postfix formulas without `eval`. It converts display units into SI once, checks formula dimensions, tests endpoints and interior samples, rejects inert sliders and evaluates numerical reference cases. Mass–energy and Hooke’s law also have independent reference calculations. For example, 1 g corresponds to about 89.88 TJ of rest energy; 1 kg is about 0.08988 EJ. These checks establish numerical consistency, not scientific correctness for arbitrary generated models. Unsupported domains and failed checks produce a recoverable error; one repair request to the same provider is allowed. No automatic provider fallback is introduced.
+
+Custom HTML remains isolated in an opaque-origin iframe. It is hidden while defaults and every combination of parameter endpoints are checked. Its outputs must agree with the shared engine, and display checks detect clipped, overlapping or unreadably small SVG labels. Failed or unresponsive custom scenes fall back to a shared quantity view. Old saved visualizations remain readable, and new saved experiments preserve their learning mode and parameters. The essential limitation stays visible; detailed assumptions and checks expand on demand.
+
 Use Node.js 24.5 or newer. The server honors the platform’s HTTPS proxy and trusted CA configuration.
 
-**Default: Gemini free-tier AI.** Create a Gemini API key in [Google AI Studio](https://aistudio.google.com/apikey) and add it securely as `PARALLAX_GEMINI_API_KEY` in environment settings or your hosting provider's secret manager. Keep `PARALLAX_PROVIDER=gemini` (also the default when unset). Use a Google project on the free tier with billing disabled if you want to avoid charges. Free-tier availability and quotas depend on account, project, region and model; review [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing). Creating a key does not provide unlimited usage. Google’s applicable free-tier data terms apply to submitted prompts.
+**OpenAI configuration:** `.env.example` selects OpenAI with the following server-only variables:
 
-The default model is `gemini-3.1-flash-lite`; `PARALLAX_GEMINI_MODEL=gemini-3.8-flash` is also supported, but timed out in this environment. Older 2.5 Flash models may be unavailable to new users. Live model access must be checked with your key. The server needs HTTPS access to `generativelanguage.googleapis.com`. Keys travel only in the server's `x-goog-api-key` header, never URLs or browser code. Live Gemini Flash-Lite generation has been validated through the app: a Hooke’s law lesson returned HTTP 200, rendered in the sandbox without page errors, and its force readout and mass position responded correctly to slider changes and reset. Mocked provider tests cover errors and paid-fallback prevention.
+```dotenv
+PARALLAX_PROVIDER=openai
+PARALLAX_API_KEY=
+PARALLAX_MODEL=gpt-5.6-sol
+```
 
-The app **never automatically falls back to a paid provider**, including when Gemini is missing a key, rate-limited or unavailable. Quota exhaustion displays an error and leaves the prompt available for retry.
+Fill in `PARALLAX_API_KEY` privately in `.env.local` or your hosting provider's secret settings. For Vercel, add these same three variables in Project Settings → Environment Variables for Production and Preview, store the API key as a Secret, and redeploy. The server needs OpenAI API credits, HTTPS access to `api.openai.com`, and access to the configured model through the Chat Completions API with structured outputs. The example model is a configuration choice; confirm its availability for your account. OpenAI is selected only when `PARALLAX_PROVIDER=openai` is explicitly set; omitting the provider still selects Gemini, and omitting `PARALLAX_MODEL` in OpenAI mode uses the code's fallback `gpt-4.1-mini`.
 
-**Optional paid integration:** OpenAI is used only when you explicitly set `PARALLAX_PROVIDER=openai`, with the server secret `PARALLAX_API_KEY` and optional `PARALLAX_MODEL` (default `gpt-4.1-mini`). That mode needs OpenAI API credits and HTTPS access to `api.openai.com`. An existing OpenAI key alone does not enable this mode. Never send either key in chat.
+**Optional Gemini alternative:** set `PARALLAX_PROVIDER=gemini`, configure `PARALLAX_GEMINI_API_KEY` from [Google AI Studio](https://aistudio.google.com/apikey), and optionally set `PARALLAX_GEMINI_MODEL` (default `gemini-3.1-flash-lite`). The Gemini variables are commented out in `.env.example`. This mode needs HTTPS access to `generativelanguage.googleapis.com`. Free-tier availability and quotas depend on account, project, region and model; review [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing). The app never automatically switches providers when a key is missing or a request fails.
 
 For local development, copy `.env.example` to `.env.local` and fill in the key privately. `.env.local` and all `.env` files except the blank example are ignored by Git. Restart the dev server after changing values. Never put credentials in `VITE_*` variables, source files, or browser storage. The browser calls only your own server; it never receives the API key. No real key is included in this repository.
 

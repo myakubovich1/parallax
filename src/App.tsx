@@ -135,7 +135,7 @@ export default function App() {
     <div className="app">
       <PhosphorBackground />
       <a className="skip" href="#main">Skip to content</a>
-      <TopBar onHome={() => goEntry()} onNew={() => { setPrompt(''); setError(null); goEntry(true); }} onSaved={() => setDialog('saved')} onSettings={() => setDialog('settings')} savedCount={saved.length} />
+      <TopBar onHome={() => goEntry()} onNew={() => { setPrompt(''); setError(null); goEntry(true); }} onSaved={() => setDialog('saved')} onSettings={() => setDialog('settings')} savedCount={saved.length} docked={screen.kind !== 'entry'} />
 
       {screen.kind === 'entry' ? (
         <EntryScreen
@@ -153,14 +153,14 @@ export default function App() {
           onOpenLesson={(id, params) => { setGen({ status: 'idle' }); openLesson(id, mode, params); }}
         />
       ) : screen.kind === 'preloaded' ? (
-        <GeneratedWorkspace key={screen.key} lesson={formulaLesson(FORMULA_BY_ID[screen.id], screen.mode)} initialParams={screen.params} label="Preloaded experiment · Authored model · No API call" stage={params => <CatalogStage formula={FORMULA_BY_ID[screen.id]} params={params}/>} onExit={() => goEntry()} onSave={params => {
+        <GeneratedWorkspace key={screen.key} lesson={formulaLesson(FORMULA_BY_ID[screen.id], screen.mode)} initialMode={screen.mode} initialParams={screen.params} label="Preloaded experiment · Authored model · No API call" stage={params => <CatalogStage formula={FORMULA_BY_ID[screen.id]} params={params}/>} onExit={() => goEntry()} onSave={params => {
           const entry: SavedExperiment = { id: crypto.randomUUID(), formulaId: screen.id, title: FORMULA_BY_ID[screen.id].title, mode: screen.mode, params, savedAt: Date.now() };
           const ok = persist([entry, ...saved].slice(0, 50));
           setToast(ok ? 'Saved to this browser. Find it in Saved experiments.' : 'Couldn’t save: browser storage is full or unavailable.');
         }}/>
       ) : screen.kind === 'generated' ? (
-        <GeneratedWorkspace key={screen.key} lesson={screen.lesson} initialParams={screen.params} onExit={() => goEntry()} onSave={params => {
-          const entry: SavedExperiment = { id: crypto.randomUUID(), generatedLesson: screen.lesson, title: screen.lesson.title, mode: screen.mode, params, savedAt: Date.now() };
+        <GeneratedWorkspace key={screen.key} lesson={screen.lesson} initialMode={screen.mode} initialParams={screen.params} onExit={() => goEntry()} onSave={(params, savedMode) => {
+          const entry: SavedExperiment = { id: crypto.randomUUID(), generatedLesson: screen.lesson, title: screen.lesson.title, mode: savedMode, params, savedAt: Date.now() };
           const ok = persist([entry, ...saved].slice(0, 50));
           setToast(ok ? 'Saved to this browser. Find it in Saved experiments.' : 'Couldn’t save: browser storage is full or unavailable. Delete an older experiment and try again.');
         }} />

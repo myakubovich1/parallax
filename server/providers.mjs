@@ -37,11 +37,11 @@ export function readLesson(provider, result) {
     const candidate = result.candidates?.[0];
     if (candidate?.finishReason !== 'STOP') throw new Error('Incomplete or blocked Gemini response');
     const text = candidate.content?.parts?.filter(part => !part.thought).map(part => part.text || '').join('');
-    return validateLesson(JSON.parse(text));
+    return validateLesson(JSON.parse(text), true);
   }
   const choice = result.choices?.[0];
   if (choice?.finish_reason !== 'stop' || choice.message?.refusal) throw new Error('Incomplete response');
-  return validateLesson(JSON.parse(choice.message?.content));
+  return validateLesson(JSON.parse(choice.message?.content), true);
 }
 
 export function providerFailure(provider, status, failure) {

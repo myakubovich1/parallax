@@ -9,7 +9,7 @@ export type GenerationStage = 'matching' | 'generating' | 'loading';
 
 export const STAGE_LABEL: Record<GenerationStage, string> = {
   matching: 'Finding a preloaded experiment',
-  generating: 'Generating an interactive equation lesson',
+  generating: 'Designing your experiment and checking its model',
   loading: 'Loading the lesson’s interactive model',
 };
 
