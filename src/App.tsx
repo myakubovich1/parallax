@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { SavedDialog } from './components/SavedDialog';
 import { SettingsDialog } from './components/SettingsDialog';
 import { TopBar } from './components/TopBar';
@@ -7,6 +7,8 @@ import { EggCaption } from './components/EggCaption';
 import { cueRobot, isMassEnergy, listenForKeyEggs, revealEgg, setOverdrive } from './lib/eggs';
 import { GenerationError } from './lib/generation/adapter';
 import { liveAdapter } from './lib/generation/liveAdapter';
+import { CatalogWorkspace } from './workspace/CatalogWorkspace';
+import { FORMULA_BY_ID } from './lib/catalog/formulas';
 import { GeneratedWorkspace } from './workspace/GeneratedWorkspace';
 import { LESSON_BY_ID, defaultParams } from './lib/lessons/registry';
 import type { ConceptId, GeneratedLessonSpec, LearningMode, LessonSpec, Params } from './lib/lessons/types';
@@ -15,7 +17,7 @@ import { useSettings } from './lib/settings';
 import { EntryScreen, type GenState } from './screens/EntryScreen';
 import { LessonWorkspace } from './workspace/LessonWorkspace';
 
-type Screen = { kind: 'generated'; lesson: GeneratedLessonSpec; mode: LearningMode; params?: Params; key: number } | { kind: 'entry' } | { kind: 'lesson'; lesson: LessonSpec; mode: LearningMode; params: Params; key: number };
+type Screen = { kind: 'preloaded'; id: string; mode: LearningMode; params?: Params; key: number } | { kind: 'generated'; lesson: GeneratedLessonSpec; mode: LearningMode; params?: Params; key: number } | { kind: 'entry' } | { kind: 'lesson'; lesson: LessonSpec; mode: LearningMode; params: Params; key: number };
 
 const adapter = liveAdapter;
 /** Progress UI appears only if a request takes longer than this, so instant demo lookups don't flash. */
@@ -28,6 +30,7 @@ export default function App() {
     const id = location.hash.slice(1);
     return isConcept(id) ? { kind: 'lesson', lesson: LESSON_BY_ID[id], mode: 'explore', params: defaultParams(LESSON_BY_ID[id]), key: 0 } : { kind: 'entry' };
   });
+  useLayoutEffect(() => { window.scrollTo(0, 0); }, [screen]);
   const [prompt, setPrompt] = useState('');
   const [mode, setMode] = useState<LearningMode>('explore');
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +44,9 @@ export default function App() {
   const { reducedMotion } = useSettings();
   const reducedMotionRef = useRef(reducedMotion);
   reducedMotionRef.current = reducedMotion;
+  useEffect(() => {
+    if (gen.status === 'confirmation') document.getElementById('equation-review')?.focus();
+  }, [gen.status]);
 
   // Key-sequence eggs: the Konami code, and typing "parallax" outside any field.
   useEffect(() => {
@@ -100,8 +106,8 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
-  const create = useCallback(async () => {
-    const text = prompt.trim();
+  const create = useCallback(async (confirmedText?: string) => {
+    const text = (typeof confirmedText === 'string' ? confirmedText : prompt).trim();
     if (!text) {
       setError('Ask a question about the world, or pick one of the examples below.');
       inputRef.current?.focus();
@@ -123,12 +129,24 @@ export default function App() {
     try {
       const res = await adapter.generate(
         { prompt: text, mode },
-        { signal: ac.signal, onStage: (stage) => setGen((g) => (g.status === 'running' ? { ...g, stage } : g)) },
+        { signal: ac.signal, confirmedInput: typeof confirmedText === 'string', onStage: (stage) => setGen((g) => (g.status === 'running' ? { ...g, stage } : g)) },
       );
       if (ac.signal.aborted) return;
-      if (res.status === 'ready') {
+      if (res.status === 'review') {
+        if (res.review.kind === 'correction') setGen({ status: 'confirmation', review: res.review });
+        else {
+          setGen({ status: 'idle' });
+          setError(res.review.message);
+          inputRef.current?.focus();
+        }
+      } else if (res.status === 'ready') {
         setGen({ status: 'idle' });
         openLesson(res.lesson.id, mode);
+      } else if (res.status === 'preloaded') {
+        setGen({ status: 'idle' });
+        setScreen({ kind: 'preloaded', id: res.id, mode, key: keyRef.current++ });
+        if (location.hash) history.pushState(null, '', location.pathname + location.search);
+        window.scrollTo(0, 0);
       } else if (res.status === 'generated') {
         setGen({ status: 'idle' });
         setScreen({ kind: 'generated', lesson: res.lesson, mode, key: keyRef.current++ });
@@ -174,16 +192,25 @@ export default function App() {
         <EntryScreen
           ref={inputRef}
           prompt={prompt}
-          onPrompt={(v) => { setPrompt(v); if (error) setError(null); if (gen.status === 'unsupported' || gen.status === 'failed') setGen({ status: 'idle' }); }}
+          onPrompt={(v) => { setPrompt(v); if (error) setError(null); if (gen.status === 'unsupported' || gen.status === 'failed' || gen.status === 'confirmation') setGen({ status: 'idle' }); }}
           mode={mode}
           onMode={setMode}
           error={error}
           gen={gen}
-          onCreate={create}
+          onCreate={() => { if (gen.status !== 'confirmation') void create(); }}
           onCancel={cancel}
-          onRetry={create}
+          onRetry={() => void create()}
+          onConfirmInput={(text) => { setPrompt(text); void create(text); }}
+          onEditInput={() => { setGen({ status: 'idle' }); inputRef.current?.focus(); }}
+          onOpenFormula={id => { abortRef.current?.abort(); setGen({ status: 'idle' }); setScreen({kind:'preloaded',id,mode,key:keyRef.current++}); window.scrollTo(0,0); }}
           onOpenLesson={(id, params) => { setGen({ status: 'idle' }); openLesson(id, mode, params); }}
         />
+      ) : screen.kind === 'preloaded' ? (
+        <CatalogWorkspace key={screen.key} formula={FORMULA_BY_ID[screen.id]} initialMode={screen.mode} initialParams={screen.params} onExit={() => goEntry()} onSave={(params, savedMode) => {
+          const entry: SavedExperiment = { id: crypto.randomUUID(), formulaId: screen.id, title: FORMULA_BY_ID[screen.id].title, mode: savedMode, params, savedAt: Date.now() };
+          const ok = persist([entry, ...saved].slice(0, 50));
+          setToast(ok ? 'Saved to this browser. Find it in Saved experiments.' : 'Couldn’t save: browser storage is full or unavailable.');
+        }}/>
       ) : screen.kind === 'generated' ? (
         <GeneratedWorkspace key={screen.key} lesson={screen.lesson} initialMode={screen.mode} initialParams={screen.params} onExit={() => goEntry()} onSave={(params, savedMode) => {
           const entry: SavedExperiment = { id: crypto.randomUUID(), generatedLesson: screen.lesson, title: screen.lesson.title, mode: savedMode, params, savedAt: Date.now() };
@@ -209,13 +236,18 @@ export default function App() {
         items={saved}
         onOpen={(e) => {
           setDialog(null);
-          if (e.generatedLesson) {
+          if (e.formulaId) {
+            abortRef.current?.abort(); setGen({ status: 'idle' });
+            setScreen({ kind: 'preloaded', id: e.formulaId, mode: e.mode, params: e.params, key: keyRef.current++ });
+            if (location.hash) history.pushState(null, '', location.pathname + location.search);
+            window.scrollTo(0, 0);
+          } else if (e.generatedLesson) {
             abortRef.current?.abort();
             setGen({ status: 'idle' });
             setScreen({ kind: 'generated', lesson: e.generatedLesson, mode: e.mode, params: e.params, key: keyRef.current++ });
             if (location.hash) history.pushState(null, '', location.pathname + location.search);
             window.scrollTo(0, 0);
-          } else openLesson(e.conceptId, e.mode, e.params);
+          } else if (e.conceptId) openLesson(e.conceptId, e.mode, e.params);
         }}
         onDelete={(id) => persist(saved.filter((s) => s.id !== id))}
       />

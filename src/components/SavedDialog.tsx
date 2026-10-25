@@ -1,3 +1,4 @@
+import { FORMULA_BY_ID } from '../lib/catalog/formulas';
 import { fixed } from '../lib/format';
 import { LESSON_BY_ID } from '../lib/lessons/registry';
 import type { SavedExperiment } from '../lib/storage';
@@ -23,7 +24,7 @@ export function SavedDialog({ open, onClose, items, onOpen, onDelete }: Props) {
       ) : (
         <ul className="saved-list">
           {items.map((e) => {
-            const lesson = e.generatedLesson ?? (e.conceptId ? LESSON_BY_ID[e.conceptId] : undefined);
+            const lesson = (e.formulaId ? FORMULA_BY_ID[e.formulaId] : undefined) ?? e.generatedLesson ?? (e.conceptId ? LESSON_BY_ID[e.conceptId] : undefined);
             if (!lesson) return null;
             const summary = lesson.params.map((d) => `${d.symbol.replace(/_(\w)/, '$1')} ${fixed(e.params[d.id] ?? d.default, d.digits)}${d.unit && d.unit !== 'rel.' ? ` ${d.unit}` : ''}`).join(' · ');
             return (

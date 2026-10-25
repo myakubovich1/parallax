@@ -1,3 +1,4 @@
+import { FORMULA_BY_ID } from './catalog/formulas';
 import { validateLesson } from '../../server/lesson.mjs';
 import type { ConceptId, GeneratedLessonSpec, LearningMode, Params } from './lessons/types';
 
@@ -10,8 +11,9 @@ interface SavedBase {
 }
 
 export type SavedExperiment = SavedBase & (
-  { conceptId: ConceptId; generatedLesson?: never }
-  | { conceptId?: never; generatedLesson: GeneratedLessonSpec }
+  { conceptId: ConceptId; generatedLesson?: never; formulaId?: never }
+  | { conceptId?: never; generatedLesson: GeneratedLessonSpec; formulaId?: never }
+  | { conceptId?: never; generatedLesson?: never; formulaId: string }
 );
 
 const KEY = 'parallax.saved.v1';
@@ -22,6 +24,7 @@ export function loadSaved(): SavedExperiment[] {
     const list = raw ? (JSON.parse(raw) as SavedExperiment[]) : [];
     return Array.isArray(list) ? list.filter(e => {
       if (!e || typeof e.id !== 'string' || !e.params || !Object.values(e.params).every(v => typeof v === 'number' && Number.isFinite(v))) return false;
+      if (e.formulaId) return Object.hasOwn(FORMULA_BY_ID, e.formulaId);
       if (e.generatedLesson) {
         try { validateLesson(e.generatedLesson); return true; } catch { return false; }
       }

@@ -19,7 +19,7 @@ try {
   });
   const generate = async (mode = 'explore') => {
     await page.goto(base);
-    await page.locator('#concept').fill('Explain E=mc^2');
+    await page.locator('#concept').fill('Explain this custom version-two experiment');
     await page.locator(`input[name=mode][value=${mode}]`).check();
     await page.getByRole('button', { name: 'Create experiment' }).click();
     await page.locator('.experiment-workspace').waitFor();

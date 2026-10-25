@@ -28,7 +28,7 @@ export const ConceptInput = forwardRef<HTMLTextAreaElement, Props>(function Conc
           rows={3}
           value={value}
           disabled={disabled}
-          placeholder="Ask how something in the world works…"
+          placeholder="Try kinetic energy, E = mc², or a scientific question…"
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKey}
           aria-invalid={!!error}

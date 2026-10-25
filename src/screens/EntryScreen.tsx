@@ -1,14 +1,18 @@
 import { forwardRef } from 'react';
+import { FormulaLibrary } from '../components/FormulaLibrary';
 import { ConceptInput } from '../components/ConceptInput';
 import { Icon } from '../components/Icon';
 import { ModeSelector } from '../components/ModeSelector';
 import { STAGE_LABEL, type GenerationStage } from '../lib/generation/adapter';
 import { LESSONS } from '../lib/lessons/registry';
 import type { ConceptId, LearningMode, Params } from '../lib/lessons/types';
+import type { InputReview } from '../lib/catalog/matcher';
+import { MathText } from '../components/MathText';
 import { WavePreview } from './WavePreview';
 
 export type GenState =
   | { status: 'idle' }
+  | { status: 'confirmation'; review: Extract<InputReview, { kind: 'correction' }> }
   | { status: 'running'; stage: GenerationStage; visible: boolean; stages: GenerationStage[] }
   | { status: 'failed'; message: string }
   | { status: 'unsupported'; prompt: string };
@@ -23,7 +27,10 @@ interface Props {
   onCreate: () => void;
   onCancel: () => void;
   onRetry: () => void;
+  onConfirmInput: (text: string) => void;
+  onEditInput: () => void;
   onOpenLesson: (id: ConceptId, params?: Params) => void;
+  onOpenFormula: (id: string) => void;
 }
 
 const EXAMPLES: { id: ConceptId; label: string }[] = [
@@ -50,6 +57,21 @@ export const EntryScreen = forwardRef<HTMLTextAreaElement, Props>(function Entry
           <form className="entry-form" onSubmit={(e) => { e.preventDefault(); onCreate(); }} noValidate>
             <div className="input-strip instrument-label"><span>01 / Your experiment</span><span aria-hidden="true">↳</span></div>
             <ConceptInput ref={inputRef} value={prompt} onChange={onPrompt} onSubmit={onCreate} error={error} disabled={running} />
+            {gen.status === 'confirmation' && (
+              <section id="equation-review" className="equation-review" aria-labelledby="equation-review-title" tabIndex={-1}>
+                <h2 id="equation-review-title">Did you mean this equation?</h2>
+                <p>{gen.review.reason}</p>
+                <dl>
+                  <div><dt>You entered</dt><dd>{gen.review.original}</dd></div>
+                  <div><dt>Suggested · {gen.review.title}</dt><dd><MathText text={gen.review.corrected} /></dd></div>
+                </dl>
+                <div className="equation-review-actions">
+                  <button type="button" className="btn primary" onClick={() => props.onConfirmInput(gen.review.corrected)}>Use corrected equation →</button>
+                  <button type="button" className="btn" onClick={props.onEditInput}>Edit input</button>
+                  <button type="button" className="link-btn" onClick={() => props.onConfirmInput(gen.review.original)}>Use my original input</button>
+                </div>
+              </section>
+            )}
             <div className="examples">
               <span className="instrument-label">Try</span>
               {EXAMPLES.map((ex) => (
@@ -59,11 +81,11 @@ export const EntryScreen = forwardRef<HTMLTextAreaElement, Props>(function Entry
               ))}
             </div>
             <ModeSelector value={mode} onChange={onMode} />
-            <div className="create-row">
+            {gen.status !== 'confirmation' && <div className="create-row">
               <button type="submit" className="btn primary large" disabled={running}>
                 Create experiment <span aria-hidden="true">→</span>
               </button>
-            </div>
+            </div>}
           </form>
 
           <GenerationStatus gen={gen} onCancel={onCancel} onRetry={onRetry} onOpenLesson={onOpenLesson} />
@@ -74,16 +96,17 @@ export const EntryScreen = forwardRef<HTMLTextAreaElement, Props>(function Entry
           <WavePreview onOpen={(params) => onOpenLesson('wave-interference', params)} />
         </section>
       </div>
+      <FormulaLibrary onSelect={id => { const builtin = LESSONS.find(l => l.id === id); if (builtin) onOpenLesson(builtin.id); else props.onOpenFormula(id); }}/>
       <footer className="entry-foot">
         <span className="instrument-label">Less memorizing. More understanding.</span>
-        <span className="muted small">Explore the world with AI. Example lessons are authored.</span>
+        <span className="muted small">50 preloaded formulas. Explore further with AI.</span>
       </footer>
     </main>
   );
 });
 
 function GenerationStatus({ gen, onCancel, onRetry, onOpenLesson }: Pick<Props, 'gen' | 'onCancel' | 'onRetry' | 'onOpenLesson'>) {
-  if (gen.status === 'idle' || (gen.status === 'running' && !gen.visible)) return <div className="gen-status" aria-live="polite" />;
+  if (gen.status === 'idle' || gen.status === 'confirmation' || (gen.status === 'running' && !gen.visible)) return <div className="gen-status" aria-live="polite" />;
   if (gen.status === 'running') {
     const at = gen.stages.indexOf(gen.stage);
     return (

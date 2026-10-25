@@ -8,6 +8,14 @@ export const liveAdapter: GenerationAdapter = {
   stages: ['matching', 'generating', 'loading'],
   async generate(req, opts) {
     opts.onStage('matching');
+    const { matchFormula, reviewFormula } = await import('../catalog/matcher');
+    if (opts.signal.aborted) throw new DOMException('Cancelled', 'AbortError');
+    if (!opts.confirmedInput) {
+      const review = reviewFormula(req.prompt);
+      if (review) return { status: 'review', review };
+    }
+    const formula = matchFormula(req.prompt);
+    if (formula) return { status: 'preloaded', id: formula.id };
     if (matchLesson(req.prompt)) return demoAdapter.generate(req, opts);
     opts.onStage('generating');
     let response: Response;

@@ -1,16 +1,16 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Icon } from '../components/Icon';
 import { isExperiment, type GeneratedLessonSpec, type LegacyGeneratedLesson, type LearningMode, type Params } from '../lib/lessons/types';
 import { ExperimentWorkspace } from './ExperimentWorkspace';
 import { SandboxedStage } from '../renderers/SandboxedStage';
 import { MathText } from '../components/MathText';
 
-interface Props {lesson: GeneratedLessonSpec; initialMode?: LearningMode; initialParams?: Params; onExit: () => void; onSave: (params: Params, mode: LearningMode) => void}
+interface Props {lesson: GeneratedLessonSpec; initialMode?: LearningMode; initialParams?: Params; onExit: () => void; onSave: (params: Params, mode: LearningMode) => void; stage?: (params: Params) => ReactNode; label?: string}
 export function GeneratedWorkspace(props: Props) {
   return isExperiment(props.lesson) ? <ExperimentWorkspace {...props} lesson={props.lesson} /> : <LegacyWorkspace {...props} lesson={props.lesson} />;
 }
 
-function LegacyWorkspace({ lesson, initialParams, initialMode = 'explore', onExit, onSave }: Omit<Props, 'lesson'> & {lesson: LegacyGeneratedLesson}) {
+function LegacyWorkspace({ lesson, initialParams, initialMode = 'explore', onExit, onSave, stage, label }: Omit<Props, 'lesson'> & {lesson: LegacyGeneratedLesson}) {
   const defaults = () => Object.fromEntries(lesson.params.map(p => [p.id, p.default]));
   const [params, setParams] = useState(() => Object.fromEntries(lesson.params.map(p => [p.id, Math.max(p.min, Math.min(p.max, initialParams?.[p.id] ?? p.default))])));
   return (
@@ -19,15 +19,15 @@ function LegacyWorkspace({ lesson, initialParams, initialMode = 'explore', onExi
         <button className="btn" onClick={onExit}>← Back to start</button>
         <button className="btn primary" onClick={() => onSave(params, initialMode)}><Icon name="save" size={16} /> Save experiment</button>
       </header>
-      <p className="instrument-label">AI-generated experiment · Check assumptions and results</p>
+      <p className="instrument-label">{label ?? 'AI-generated experiment · Check assumptions and results'}</p>
       <h1>{lesson.title}</h1>
       <div className="generated-grid">
         <section aria-label="Interactive experiment">
-          <div className="generated-stage"><SandboxedStage html={lesson.stageHtml} params={params} title={lesson.title} /></div>
+          {stage ? stage(params) : <div className="generated-stage"><SandboxedStage html={lesson.stageHtml} params={params} title={lesson.title} /></div>}
           <div className="frame generated-controls">
             {lesson.params.map(p => <label key={p.id} className="generated-param" htmlFor={`generated-${p.id}`}>
               <span>{p.label}: <output>{params[p.id].toFixed(p.digits)} {p.unit}</output></span>
-              <input id={`generated-${p.id}`} type="range" min={p.min} max={p.max} step={p.step} value={params[p.id]} onChange={e => setParams(v => ({ ...v, [p.id]: Number(e.target.value) }))} />
+              <input id={`generated-${p.id}`} type="range" min={p.min} max={p.max} step={p.step} value={params[p.id]} style={{ '--fill': `${((params[p.id] - p.min) / (p.max - p.min)) * 100}%` } as React.CSSProperties} onChange={e => setParams(v => ({ ...v, [p.id]: Number(e.target.value) }))} />
               <span className="muted small">{p.hint}</span>
             </label>)}
             <button className="btn" onClick={() => setParams(defaults())}>Reset values</button>

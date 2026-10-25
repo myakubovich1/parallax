@@ -67,7 +67,7 @@ try {
   };
   await page.route('**/api/generate', route => route.fulfill({ json: { lesson: generated } }));
   await page.goto(base);
-  await page.locator('#concept').fill('Explain Hooke’s law');
+  await page.locator('#concept').fill('Explain a hypothetical cubic restoring force');
   await page.getByRole('button', { name: 'Create experiment' }).click();
   await page.getByRole('heading', { name: 'Spring experiment', exact: true }).waitFor();
   assert.equal(await page.locator('.phosphor-background').count(), 1);
