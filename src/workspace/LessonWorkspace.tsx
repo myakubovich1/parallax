@@ -97,8 +97,10 @@ export function LessonWorkspace({ lesson, initialMode, initialParams, onExit, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson.stepRate ? JSON.stringify(params) : null]);
 
+  const tweenRef = useRef(0);
   const commitParams = useCallback(
     (patch: Params, announce = true) => {
+      cancelAnimationFrame(tweenRef.current);
       const prev = paramsRef.current;
       const next = sanitizeParams(lesson, { ...prev, ...patch });
       paramsRef.current = next;
@@ -110,7 +112,6 @@ export function LessonWorkspace({ lesson, initialMode, initialParams, onExit, on
   );
 
   // Smoothly interpolate to new values so cause and effect stay visible.
-  const tweenRef = useRef(0);
   const animateParams = useCallback(
     (patch: Params, ms = 700) => {
       cancelAnimationFrame(tweenRef.current);

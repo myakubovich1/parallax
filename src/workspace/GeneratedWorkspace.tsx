@@ -27,7 +27,7 @@ function LegacyWorkspace({ lesson, initialParams, initialMode = 'explore', onExi
           <div className="frame generated-controls">
             {lesson.params.map(p => <label key={p.id} className="generated-param" htmlFor={`generated-${p.id}`}>
               <span>{p.label}: <output>{params[p.id].toFixed(p.digits)} {p.unit}</output></span>
-              <input id={`generated-${p.id}`} type="range" min={p.min} max={p.max} step={p.step} value={params[p.id]} onChange={e => setParams(v => ({ ...v, [p.id]: Number(e.target.value) }))} />
+              <input id={`generated-${p.id}`} type="range" min={p.min} max={p.max} step={p.step} value={params[p.id]} style={{ '--fill': `${((params[p.id] - p.min) / (p.max - p.min)) * 100}%` } as React.CSSProperties} onChange={e => setParams(v => ({ ...v, [p.id]: Number(e.target.value) }))} />
               <span className="muted small">{p.hint}</span>
             </label>)}
             <button className="btn" onClick={() => setParams(defaults())}>Reset values</button>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 
 /** Simulated time, shared by a stage and its renderer without re-rendering React each frame. */
 export class SimClock {
@@ -74,5 +74,5 @@ export function useClockDraw(clock: SimClock, draw: () => void, deps: unknown[])
   drawRef.current = draw;
   useEffect(() => clock.subscribe(() => drawRef.current()), [clock]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => drawRef.current(), deps);
+  useLayoutEffect(() => drawRef.current(), deps);
 }

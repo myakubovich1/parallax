@@ -34,6 +34,7 @@ try {
   assert.equal(await frame.locator('#isolation').textContent(), 'isolated');
   assert.equal(await page.locator('iframe').getAttribute('sandbox'), 'allow-scripts');
   await page.locator('#generated-x').fill('2');
+  assert.equal(await page.locator('#generated-x').evaluate(el => getComputedStyle(el).getPropertyValue('--fill')), '100%');
   await frame.locator('#force').filter({ hasText: 'Force: -4 N' }).waitFor();
   // The same intentionally overlapping SVG must stay legible after a parameter update.
   await page.waitForFunction(() => document.querySelector('iframe') !== null);
@@ -55,6 +56,7 @@ try {
   assert.equal(await labelsSeparate(), true);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await page.getByRole('button', { name: 'Reset values' }).click();
+  assert.equal(await page.locator('#generated-x').evaluate(el => getComputedStyle(el).getPropertyValue('--fill')), '75%');
   await frame.locator('#force').filter({ hasText: 'Force: -2 N' }).waitFor();
   await page.getByRole('button', { name: 'Back to start' }).click();
   await page.locator('#concept').fill('Explain a hypothetical cubic restoring force');

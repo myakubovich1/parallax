@@ -1,4 +1,5 @@
 import type { GeneratedLessonSpec, LearningMode, LessonSpec } from '../lessons/types';
+import type { InputReview } from '../catalog/matcher';
 
 /**
  * Boundary between the UI and whatever produces lessons. Demo mode resolves
@@ -16,6 +17,7 @@ export const STAGE_LABEL: Record<GenerationStage, string> = {
 export interface GenerationRequest { prompt: string; mode: LearningMode }
 
 export type GenerationResult =
+  | { status: 'review'; review: InputReview }
   | { status: 'ready'; lesson: LessonSpec; source: 'demo' | 'live' }
   | { status: 'preloaded'; id: string }
   | { status: 'generated'; lesson: GeneratedLessonSpec }
@@ -32,6 +34,6 @@ export interface GenerationAdapter {
   readonly stages: GenerationStage[];
   generate(
     req: GenerationRequest,
-    opts: { signal: AbortSignal; onStage: (s: GenerationStage) => void },
+    opts: { signal: AbortSignal; onStage: (s: GenerationStage) => void; confirmedInput?: boolean },
   ): Promise<GenerationResult>;
 }

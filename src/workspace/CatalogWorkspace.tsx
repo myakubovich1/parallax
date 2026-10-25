@@ -36,11 +36,20 @@ export function CatalogWorkspace({
     [reference, setReference] = useState<Params | null>(null),
     [tab, setTab] = useState<'controls' | 'prediction'>('controls'),
     [choice, setChoice] = useState<string | null>(null),
-    [revealed, setRevealed] = useState(false);
+    [revealed, setRevealed] = useState(false),
+    [interactionVersion, setInteractionVersion] = useState(0);
   const update = useCallback(
     (id: string, value: number) => setParams((p) => ({ ...p, [id]: value })),
     [],
   );
+  const adjust = (id: string, value: number) => {
+    setInteractionVersion((v) => v + 1);
+    update(id, value);
+  };
+  const applyValues = (values: Params) => {
+    setInteractionVersion((v) => v + 1);
+    setParams(values);
+  };
   const first = f.params[0],
     current = f.calculate(params),
     base = reference ?? defaults;
@@ -86,6 +95,7 @@ export function CatalogWorkspace({
             reference={reference}
             focused={focused}
             onParam={update}
+            interactionVersion={interactionVersion}
           />
           <InstrumentFrame
             title="The equation"
@@ -169,21 +179,22 @@ export function CatalogWorkspace({
           {tab === 'controls' ? (
             <div className="catalog-inspector-body">
               <p className="catalog-next-action">
-                Change one variable. Watch the demonstration and its numeric result together.
+                Start with {first.label.toLowerCase()}: drag its slider and watch{' '}
+                {f.output.toLowerCase()} change.
               </p>
               <div className="catalog-presets">
-                <button className="btn small" onClick={() => setParams({ ...defaults })}>
-                  Reference
+                <button className="btn small" onClick={() => applyValues({ ...defaults })}>
+                  Defaults
                 </button>
                 <button
                   className="btn small"
-                  onClick={() => setParams((p) => ({ ...p, [first.id]: first.min }))}
+                  onClick={() => applyValues({ ...params, [first.id]: first.min })}
                 >
                   {first.symbol} = {formatValue(first.min)}
                 </button>
                 <button
                   className="btn small"
-                  onClick={() => setParams((p) => ({ ...p, [first.id]: first.max }))}
+                  onClick={() => applyValues({ ...params, [first.id]: first.max })}
                 >
                   {first.symbol} = {formatValue(first.max)}
                 </button>
@@ -203,7 +214,9 @@ export function CatalogWorkspace({
                     } as React.CSSProperties
                   }
                   onMouseEnter={() => setFocused(d.id)}
-                  onMouseLeave={() => setFocused(null)}
+                  onMouseLeave={(e) => {
+                    if (!e.currentTarget.contains(document.activeElement)) setFocused(null);
+                  }}
                 >
                   <span className="catalog-control-heading">
                     <span>
@@ -220,7 +233,8 @@ export function CatalogWorkspace({
                     max={d.max}
                     step={d.step}
                     value={params[d.id]}
-                    onChange={(e) => update(d.id, Number(e.target.value))}
+                    style={{ '--fill': `${((params[d.id] - d.min) / (d.max - d.min)) * 100}%` } as React.CSSProperties}
+                    onChange={(e) => adjust(d.id, Number(e.target.value))}
                     onFocus={() => setFocused(d.id)}
                     onBlur={() => setFocused(null)}
                     aria-label={d.label}
@@ -237,7 +251,7 @@ export function CatalogWorkspace({
               <button
                 className="btn"
                 onClick={() => {
-                  setParams({ ...defaults });
+                  applyValues({ ...defaults });
                   setReference(null);
                 }}
               >
@@ -308,7 +322,7 @@ export function CatalogWorkspace({
                     className="btn primary"
                     onClick={() => {
                       setReference({ ...base });
-                      setParams(target);
+                      applyValues(target);
                       setRevealed(true);
                     }}
                   >

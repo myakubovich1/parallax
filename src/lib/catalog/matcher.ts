@@ -205,3 +205,109 @@ export function matchFormula(prompt: string) {
   );
   return matches.length === 1 ? matches[0].f : null;
 }
+
+export type InputReview =
+  | { kind: 'correction'; original: string; corrected: string; title: string; reason: string }
+  | { kind: 'clarify'; message: string };
+
+/** Suggest small, explainable repairs. Never replace an equation without confirmation. */
+export function reviewFormula(prompt: string): InputReview | null {
+  const original = prompt.trim();
+  if (matchFormula(original)) return null;
+  if (
+    /^(?:sex|science|physics|maths?|chemistry|biology|stuff|anything|test|hello|hi)[.!?]*$/i.test(
+      original,
+    )
+  ) {
+    return {
+      kind: 'clarify',
+      message:
+        'What would you like to understand about this topic? Ask a specific scientific question, or enter an equation.',
+    };
+  }
+  // Prose, custom topics and unfamiliar valid formulas still go to the lesson provider.
+  const text = normalize(original);
+  if (text.length > 180 || (!text.includes('=') && !/[\d][*/^]|[*/^][\d(]|[²³]/.test(original)))
+    return null;
+  if (/[;\[\]"'<>]/.test(text)) return null;
+  const repairs: string[] = [];
+  if (/\/{2,}/.test(original)) repairs.push('There is an extra division sign.');
+  if (/={2,}/.test(original)) repairs.push('An equation needs a single equals sign.');
+  let repaired = original.replace(/\/{2,}/g, '/').replace(/={2,}/g, '=');
+  const opens = (repaired.match(/\(/g) ?? []).length;
+  const closes = (repaired.match(/\)/g) ?? []).length;
+  if (opens === closes + 1 && !/\)\s*\(/.test(repaired)) {
+    repaired += ')';
+    repairs.push('A closing parenthesis appears to be missing.');
+  }
+  if (repaired !== original) {
+    const parts = repaired.split('=');
+    if (parts.length <= 2 && parts.every((p) => canonical(p))) {
+      return {
+        kind: 'correction',
+        original,
+        corrected: repaired,
+        title: matchFormula(repaired)?.title ?? 'Equation',
+        reason: repairs.join(' ') + ' Please confirm the suggested equation.',
+      };
+    }
+  }
+  const parts = text.split('=');
+  if (parts.length > 2 || parts.some((p) => !p.trim() || !canonical(p))) {
+    return {
+      kind: 'clarify',
+      message:
+        'This equation looks incomplete. Check the operators, both sides of the equals sign, and any parentheses, then try again.',
+    };
+  }
+  const rhs = canonical(parts.at(-1)!);
+  const lhs = parts.length === 2 ? parts[0].replace(/\s/g, '') : null;
+  function product(signature: string | null): [number, [string, number][]] | null {
+    try {
+      const value = JSON.parse(signature ?? 'null');
+      return Array.isArray(value) && typeof value[0] === 'number' && Array.isArray(value[1])
+        ? [value[0], value[1]]
+        : null;
+    } catch {
+      return null;
+    }
+  }
+  const entered = product(rhs);
+  if (!entered) return null;
+  const reviewSignatures = [
+    ...signatures,
+    {
+      f: { title: 'Gravitational attraction', equation: 'F = G*m_1*m_2/r^2' },
+      pairs: [{ lhs: 'f', rhs: canonical('G*m_1*m_2/r^2') }],
+    },
+  ];
+  const candidates = reviewSignatures.filter(({ pairs }) =>
+    pairs.some((pair) => {
+      if (lhs && pair.lhs.replace(/\s/g, '') !== lhs) return false;
+      const known = product(pair.rhs);
+      if (!known || !entered[0] || !known[0]) return false;
+      if (
+        JSON.stringify(entered[1].map(([name]) => name)) !==
+        JSON.stringify(known[1].map(([name]) => name))
+      )
+        return false;
+      const powerDifference = entered[1].reduce(
+        (sum, [, power], i) => sum + Math.abs(power - known[1][i][1]),
+        0,
+      );
+      const ratio = Math.abs(entered[0] / known[0]);
+      const coefficientDifference =
+        entered[0] === known[0] ? 0 : [0.5, 2].includes(ratio) ? 1 : Infinity;
+      return powerDifference + coefficientDifference === 1;
+    }),
+  );
+  if (candidates.length !== 1) return null;
+  const formula = candidates[0].f;
+  return {
+    kind: 'correction',
+    original,
+    corrected: formula.equation,
+    title: formula.title,
+    reason: `This is close to the standard ${formula.title.toLowerCase()} formula, but its coefficient or exponent differs. Is that what you intended?`,
+  };
+}

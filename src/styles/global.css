@@ -607,7 +607,7 @@ input[type='range'] {
 input[type='range']::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 2px;
-  background: linear-gradient(90deg, var(--tone-c) 0 var(--fill, 50%), #2a3042 var(--fill, 50%));
+  background: linear-gradient(90deg, var(--tone-c) 0 var(--fill, 0%), #2a3042 var(--fill, 0%));
 }
 input[type='range']::-moz-range-track { height: 4px; border-radius: 2px; background: #2a3042; }
 input[type='range']::-moz-range-progress { height: 4px; background: var(--tone-c); }
@@ -1214,7 +1214,7 @@ input[type='range']:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(
 .catalog-control-heading { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; font-size:13px; }
 .catalog-control-heading b { color:var(--parameter-color); margin-right:6px; font:16px var(--font-mono); }
 .catalog-control-heading output { font:13px var(--font-mono); white-space:nowrap; color:var(--parameter-color); }
-.catalog-control input { width:100%; accent-color:var(--parameter-color); }
+.catalog-control input { width:100%; --tone:var(--parameter-color); accent-color:var(--parameter-color); }
 .catalog-range { display:flex; justify-content:space-between; font:10px var(--font-mono); color:var(--text-2); }
 .catalog-control .small { font-size:12px; line-height:1.55; }
 .catalog-assumptions { border-top:1px solid var(--rule); padding-top:16px; font-size:13px; }
@@ -1258,3 +1258,15 @@ input[type='range']:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(
 .catalog-limit { font-size:12px; }
 .catalog-main { grid-template-columns:minmax(0,1fr); }
 .catalog-stage-premium,.catalog-equation,.catalog-visual { min-width:0; }
+
+/* Small input guidance and stable numeric widths during slider interaction. */
+.equation-review { margin:8px 0 20px; padding:20px; border:1px solid var(--amber); background:var(--bg); outline-offset:4px; }
+.equation-review h2 { margin:0 0 12px; font-size:24px; }
+.equation-review p { margin:0 0 16px; color:var(--text-2); font-size:14px; }
+.equation-review dl { margin:0; display:grid; gap:12px; }
+.equation-review dt { font-size:12px; color:var(--text-2); }
+.equation-review dd { margin:4px 0 0; font:18px var(--font-mono); overflow-wrap:anywhere; }
+.equation-review dl > div:last-child dd { color:var(--lime); }
+.equation-review-actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:20px; align-items:center; }
+.equation-review-actions .btn { max-width:100%; white-space:normal; padding-top:10px; padding-bottom:10px; }
+.catalog-control-heading output,.catalog-readout strong,.param-number input { font-variant-numeric:tabular-nums; }

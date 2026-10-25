@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Icon } from '../components/Icon';
 import { InstrumentFrame } from '../components/InstrumentFrame';
 import { useSettings } from '../lib/settings';
@@ -14,6 +14,7 @@ interface Props {
   reference?: Params | null;
   focused?: string | null;
   onParam?: (id: string, value: number) => void;
+  interactionVersion?: number;
 }
 export function CatalogStage({
   formula: f,
@@ -21,6 +22,7 @@ export function CatalogStage({
   reference = null,
   focused = null,
   onParam,
+  interactionVersion = 0,
 }: Props) {
   const { reducedMotion, effects } = useSettings(),
     [playing, setPlaying] = useState(
@@ -35,6 +37,13 @@ export function CatalogStage({
   const active = useOnScreen(wrap),
     visible = usePageVisible();
   const clock = useSimClock(playing && !reducedMotion && animated, speed, active);
+  const previousInteraction = useRef(interactionVersion);
+  useLayoutEffect(() => {
+    if (previousInteraction.current === interactionVersion) return;
+    previousInteraction.current = interactionVersion;
+    setPlaying(false);
+    clock.set(0);
+  }, [interactionVersion, clock]);
   const first = f.params[0],
     value = f.calculate(p);
   const paramsRef = useRef(p);
@@ -125,7 +134,7 @@ export function CatalogStage({
           {f.title}
         </>
       }
-      meta="Authored visual experiment"
+      meta="Live demonstration"
       actions={
         <button className="btn small" aria-pressed={graph} onClick={() => setGraph((v) => !v)}>
           {graph ? 'Show demonstration' : 'Show response graph'}
@@ -147,6 +156,8 @@ export function CatalogStage({
           onKeyDown={(e) => {
             if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
               e.preventDefault();
+              setPlaying(false);
+              clock.set(0);
               change(
                 e.key === 'Home'
                   ? first.min
@@ -159,6 +170,7 @@ export function CatalogStage({
           onPointerDown={(e) => {
             if (!onParam) return;
             setPlaying(false);
+            clock.set(0);
             drag.current = { x: e.clientX, value: p[first.id] };
             e.currentTarget.setPointerCapture(e.pointerId);
           }}
@@ -271,6 +283,7 @@ export function CatalogStage({
               onClick={() => {
                 clock.set(0);
                 setPlaying(false);
+                if (['harmonic', 'rc', 'cooling'].includes(f.id)) onParam?.(first.id, first.min);
               }}
             >
               Reset animation
@@ -292,8 +305,8 @@ export function CatalogStage({
           </>
         )}
         <span className="instrument-label">
-          {animated ? 'Illustrative playback' : 'Static relationship'} · drag diagram or use arrow
-          keys
+          {animated && !playing ? 'Press Play to watch your settings' : 'Drag a slider to explore'}{' '}
+          · drag the diagram or use arrow keys
         </span>
       </div>
     </InstrumentFrame>

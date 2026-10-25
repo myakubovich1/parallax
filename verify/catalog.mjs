@@ -52,6 +52,7 @@ try {
       [f.first.max, f.maxOutput],
     ]) {
       await page.locator(`#generated-${f.first.id}`).fill(String(value));
+      assert.equal(await page.locator(`#generated-${f.first.id}`).evaluate(el => parseFloat(getComputedStyle(el).getPropertyValue('--fill'))), value === f.first.min ? 0 : 100, f.id + ' slider fill');
       assert.ok(
         (await page.locator('.catalog-readout strong').first().textContent()).includes(expected),
         f.id + ' readout',

@@ -18,6 +18,7 @@ npm run verify       # 36 end-to-end interaction checks (Playwright)
 node verify/generation.mjs # custom equation UI checks (mocked provider)
 node verify/catalog.mjs    # all 47 new models, limits, aliases, save and zero API calls (dev server)
 node verify/catalog-quality.mjs # canvas label bounds, collisions, comparison, keyboard and prediction
+node verify/input-ux.mjs   # equation confirmation, manual slider control, canvas stability and mobile input
 node verify/eggs.mjs       # triggers all 12 easter eggs (no spoilers here; read the script)
 node verify/experiments.mjs # rich lessons: units, modes, predictions, comparisons and visual fallback
 node verify/background.mjs # shared background, hover, motion preferences and responsive layouts
@@ -43,6 +44,8 @@ Keep your ignored `.env.local` on your computer. If Git reports conflicts or loc
 Parallax ships **50 authored, deterministic experiments**: 47 common formulas plus the three detailed lessons below. Browse the searchable, subject-filtered collection on the home screen, or type a formula/name. Preloaded matches never call an AI provider and need no API key. Subjects include mechanics, waves, electricity, thermodynamics, fluids, optics, and mathematics.
 
 The matcher accepts common notation and equivalent product forms, for example `kinetic energy`, `½mv²`, `1/2*m*v^2`, `0.5mv**2`, and `E = mv²/2`. Recognition uses a bounded arithmetic parser and authored aliases; it is not a general symbolic theorem prover. Requests outside the library continue to the selected AI provider.
+
+Likely input mistakes are reviewed before generation. An extra slash (`1//2mv^2`), a missing closing parenthesis, or a small coefficient/exponent difference from a known formula prompts a suggested correction. The user can confirm, edit, or keep the original; nothing is silently substituted and a pending review makes no provider call. Incomplete equations and vague topics ask for more detail. Valid unfamiliar formulas and specific scientific questions continue to AI. This review is a bounded input check, not a general scientific correctness validator.
 
 Each new model has an authored canvas demonstration with stippled bodies, measurements and annotations, plus an optional numerical response graph. Scenes are designed for their particular formula: motion trails, force vectors, impulse areas, combined charge-potential contours, spring deformation, circuit charge separation, gas particles, fluid flow, optical rays or geometric areas. The workspace includes linked variables, diagram dragging/keyboard input, presets, reference comparison, a computed prediction/reveal, live readouts and Save/reopen support. Motion-based models have play/pause, speed and reset controls; static relationships stay static. Harmonic displacement, RC discharge and cooling can animate the time parameter so readouts remain connected. Animation speed and schematic dimensions are illustrative. Quick, Explore and Basics provide different explanation lengths.
 

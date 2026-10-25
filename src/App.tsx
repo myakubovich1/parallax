@@ -44,6 +44,9 @@ export default function App() {
   const { reducedMotion } = useSettings();
   const reducedMotionRef = useRef(reducedMotion);
   reducedMotionRef.current = reducedMotion;
+  useEffect(() => {
+    if (gen.status === 'confirmation') document.getElementById('equation-review')?.focus();
+  }, [gen.status]);
 
   // Key-sequence eggs: the Konami code, and typing "parallax" outside any field.
   useEffect(() => {
@@ -103,8 +106,8 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
-  const create = useCallback(async () => {
-    const text = prompt.trim();
+  const create = useCallback(async (confirmedText?: string) => {
+    const text = (typeof confirmedText === 'string' ? confirmedText : prompt).trim();
     if (!text) {
       setError('Ask a question about the world, or pick one of the examples below.');
       inputRef.current?.focus();
@@ -126,10 +129,17 @@ export default function App() {
     try {
       const res = await adapter.generate(
         { prompt: text, mode },
-        { signal: ac.signal, onStage: (stage) => setGen((g) => (g.status === 'running' ? { ...g, stage } : g)) },
+        { signal: ac.signal, confirmedInput: typeof confirmedText === 'string', onStage: (stage) => setGen((g) => (g.status === 'running' ? { ...g, stage } : g)) },
       );
       if (ac.signal.aborted) return;
-      if (res.status === 'ready') {
+      if (res.status === 'review') {
+        if (res.review.kind === 'correction') setGen({ status: 'confirmation', review: res.review });
+        else {
+          setGen({ status: 'idle' });
+          setError(res.review.message);
+          inputRef.current?.focus();
+        }
+      } else if (res.status === 'ready') {
         setGen({ status: 'idle' });
         openLesson(res.lesson.id, mode);
       } else if (res.status === 'preloaded') {
@@ -182,14 +192,16 @@ export default function App() {
         <EntryScreen
           ref={inputRef}
           prompt={prompt}
-          onPrompt={(v) => { setPrompt(v); if (error) setError(null); if (gen.status === 'unsupported' || gen.status === 'failed') setGen({ status: 'idle' }); }}
+          onPrompt={(v) => { setPrompt(v); if (error) setError(null); if (gen.status === 'unsupported' || gen.status === 'failed' || gen.status === 'confirmation') setGen({ status: 'idle' }); }}
           mode={mode}
           onMode={setMode}
           error={error}
           gen={gen}
-          onCreate={create}
+          onCreate={() => { if (gen.status !== 'confirmation') void create(); }}
           onCancel={cancel}
-          onRetry={create}
+          onRetry={() => void create()}
+          onConfirmInput={(text) => { setPrompt(text); void create(text); }}
+          onEditInput={() => { setGen({ status: 'idle' }); inputRef.current?.focus(); }}
           onOpenFormula={id => { abortRef.current?.abort(); setGen({ status: 'idle' }); setScreen({kind:'preloaded',id,mode,key:keyRef.current++}); window.scrollTo(0,0); }}
           onOpenLesson={(id, params) => { setGen({ status: 'idle' }); openLesson(id, mode, params); }}
         />
