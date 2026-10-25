@@ -2,13 +2,14 @@ import { validateLesson } from '../../../server/lesson.mjs';
 import { GenerationError, type GenerationAdapter } from './adapter';
 import { demoAdapter } from './demoAdapter';
 import { matchLesson } from './matcher';
+import { LESSON_BY_ID } from '../lessons/registry';
 
 export const liveAdapter: GenerationAdapter = {
   kind: 'live',
   stages: ['matching', 'generating', 'loading'],
   async generate(req, opts) {
     opts.onStage('matching');
-    const { matchFormula, reviewFormula } = await import('../catalog/matcher');
+    const { matchFormula, reviewFormula, matchLessonEquation, hasEquationInput, hasModelModifiers } = await import('../catalog/matcher');
     if (opts.signal.aborted) throw new DOMException('Cancelled', 'AbortError');
     if (!opts.confirmedInput) {
       const review = reviewFormula(req.prompt);
@@ -16,7 +17,9 @@ export const liveAdapter: GenerationAdapter = {
     }
     const formula = matchFormula(req.prompt);
     if (formula) return { status: 'preloaded', id: formula.id };
-    if (matchLesson(req.prompt)) return demoAdapter.generate(req, opts);
+    const equationLesson = matchLessonEquation(req.prompt);
+    if (equationLesson) return demoAdapter.generate({ ...req, prompt: LESSON_BY_ID[equationLesson].examplePrompt }, opts);
+    if (!hasEquationInput(req.prompt) && !hasModelModifiers(req.prompt) && matchLesson(req.prompt)) return demoAdapter.generate(req, opts);
     opts.onStage('generating');
     let response: Response;
     try {

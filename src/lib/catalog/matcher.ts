@@ -1,82 +1,15 @@
-import { parse, type MathNode } from 'mathjs';
+import type { MathNode } from 'mathjs';
 import { FORMULAS } from './formulas';
-const functions = new Set(['sin', 'cos', 'tan', 'asin', 'sqrt', 'exp', 'log']);
-function normalize(text: string) {
-  return text
-    .replace(/²/g, '^2')
-    .replace(/³/g, '^3')
-    .replace(/½/g, '(1/2)')
-    .replace(/π/gi, 'pi')
-    .replace(/ω/gi, 'omega')
-    .replace(/λ/gi, 'lambda')
-    .replace(/θ/gi, 'theta')
-    .replace(/ρ/gi, 'rho')
-    .replace(/τ/gi, 'tau')
-    .replace(/[Δ∆]/g, 'delta')
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/\\(?:left|right)/g, '')
-    .replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, '(($1)/($2))')
-    .replace(/\\(?:cdot|times)/g, '*')
-    .replace(/[×·]/g, '*')
-    .replace(/[−–]/g, '-')
-    .replace(/±/g, '+')
-    .replace(/\*\*/g, '^')
-    .replace(/_/g, '')
-    .replace(/\\/g, '')
-    .replace(/[{}]/g, '')
-    .trim();
-}
+import {
+  FUNCTIONS as functions,
+  normalizeMath as normalize,
+  parseArithmetic,
+  equationKey,
+  expressionKey,
+} from './algebra';
 function canonical(input: string): string | null {
   try {
-    let text = normalize(input).replace(/\s+/g, '');
-    if (text.length > 180 || /[=;\[\]"'<>]/.test(text)) return null;
-    text = text.replace(/\b(\d+)\/(\d+)(?=[a-z(])/g, '($1/$2)*');
-    const known = [
-      'lambda',
-      'omega',
-      'theta',
-      'alpha',
-      'deltat',
-      'deltal',
-      'rho',
-      'tau',
-      'pi',
-      'exp',
-      'sqrt',
-      'asin',
-      'sin',
-      'cos',
-      'tan',
-      'log',
-      'dt',
-    ];
-    const tokens = text.match(/\d+(?:\.\d+)?(?:e[+-]?\d+)?|[a-z]+\d*|[^\s]/g) || [];
-    const rendered = tokens.map((t) => {
-      if (!/^[a-z]/.test(t)) return t;
-      const out: string[] = [];
-      let rest = t;
-      while (rest) {
-        const base = known.find((k) => rest.startsWith(k));
-        const word = base
-          ? rest.match(new RegExp('^' + base + '\\d*'))?.[0]
-          : rest.match(/^[a-z]\d*/)?.[0];
-        if (!word) throw Error();
-        out.push(word);
-        rest = rest.slice(word.length);
-      }
-      return out.join('*');
-    });
-    text = rendered
-      .map((token, i) => {
-        const previous = rendered[i - 1] ?? '';
-        const fn = functions.has(previous.split('*').at(-1) ?? '');
-        return /[a-z0-9)]$/.test(previous) && /^[a-z0-9(]/.test(token) && !(token === '(' && fn)
-          ? '*' + token
-          : token;
-      })
-      .join('');
-    const tree = parse(text);
+    const tree = parseArithmetic(input);
     let count = 0;
     function canon(n: MathNode, depth = 0): string {
       if (++count > 100 || depth > 25) throw Error();
@@ -154,56 +87,145 @@ function canonical(input: string): string | null {
     return null;
   }
 }
+const nameKey = (text: string) => normalize(text).replace(/[’'\s-]/g, '');
 const signatures = FORMULAS.map((f) => {
   const equations = [f.equation, ...f.aliases.filter((a) => a.includes('='))];
   if (f.id === 'kinetic') equations.push('E = 0.5*m*v^2', 'K = 0.5*m*v^2');
   return {
     f,
+    names: [f.title, f.output, ...f.aliases.filter((a) => !a.includes('='))].map(nameKey),
+    relations: new Set(equations.map(equationKey).filter(Boolean)),
+    expressions: new Set(equations.map((e) => expressionKey(e.split('=')[1])).filter(Boolean)),
     pairs: equations
       .map((e) => ({ lhs: normalize(e.split('=')[0]), rhs: canonical(e.split('=')[1]) }))
       .filter((pair) => pair.rhs !== null),
   };
 });
+
+/** Isolate math from ordinary requests without using a provider or altering the equation. */
+function candidates(prompt: string): string[] {
+  if (prompt.length > 2000) return [];
+  const text = normalize(prompt)
+    .replace(/[“”`$]/g, '')
+    .replace(/[.?!]+$/, '')
+    .trim();
+  const out = new Set([text]);
+  const add = (value: string) => {
+    value = value.trim().replace(/^\[([\s\S]*)\]$/, '$1');
+    if (value) out.add(value);
+  };
+  for (const clause of text.split(
+    /[:;?!\n]|\b(?:please|explain|show|me|visualize|visualise|animate|plot|demonstrate|simulate|create|the|experiment|equation|formula|using|for|with|where|how|does|works?)\b/,
+  )) {
+    add(clause);
+    const parts = clause.split('=');
+    if (parts.length === 2) {
+      const symbol = parts[0].trim().match(/(?:^|\s)([a-z]{1,2}\d*)$/)?.[1];
+      if (symbol) add(symbol + '=' + parts[1]);
+    }
+  }
+  const stack: number[] = [];
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '(') stack.push(i);
+    if (text[i] === ')' && stack.length) {
+      const start = stack.pop()!;
+      const group = text.slice(start + 1, i);
+      if (group.includes('=')) add(group);
+    }
+  }
+  return [...out].slice(0, 40);
+}
+
+export const hasEquationInput = (prompt: string) => /[=^*/√²³⁴⁵⁶⁷⁸⁹]|^[-+]\s*[a-z]/i.test(prompt);
+export const hasModelModifiers = (prompt: string) =>
+  /\b(relativistic|angular momentum|damped|nonlinear|quantum|friction|drag)\b/i.test(prompt);
+
 export function matchFormula(prompt: string) {
   const text = normalize(prompt)
-    .replace(
-      /^(?:please\s+)?(?:explain|show me|show|visualize|visualise|plot|what is|what's|demonstrate)\s+/,
-      '',
-    )
     .replace(/[.?!]+$/, '')
     .trim();
   if (!text.includes('=')) {
     const clean = text.replace(/[’']/g, '');
-    const named = FORMULAS.find((f) =>
-      [f.title, ...f.aliases.filter((a) => !a.includes('='))].some(
-        (a) => clean === normalize(a).replace(/[’']/g, ''),
-      ),
-    );
-    if (named) return named;
-    if (!/\b(relativistic|angular|damped|nonlinear|quantum|friction|drag)\b/.test(clean)) {
-      const namedMatches = FORMULAS.filter((f) =>
-        [f.title, ...f.aliases.filter((a) => !a.includes('='))].some((a) => {
-          const name = normalize(a).replace(/[’']/g, '');
+    const exact = signatures.filter((s) => s.names.includes(nameKey(text)));
+    if (exact.length === 1) return exact[0].f;
+    if (!hasModelModifiers(clean)) {
+      const mentions = FORMULAS.flatMap((f) =>
+        [f.title, ...f.aliases.filter((a) => !a.includes('='))].flatMap((alias) => {
+          const name = normalize(alias).replace(/[’']/g, '');
           const i = clean.indexOf(name);
-          return (
-            i >= 0 &&
+          return i >= 0 &&
             !/[a-z]/.test(clean[i - 1] || '') &&
             !/[a-z]/.test(clean[i + name.length] || '')
-          );
+            ? [{ f, start: i, end: i + name.length }]
+            : [];
         }),
       );
-      if (namedMatches.length === 1) return namedMatches[0];
+      const matches = new Set(
+        mentions
+          .filter(
+            (m) =>
+              !mentions.some(
+                (other) =>
+                  other.f !== m.f &&
+                  other.start <= m.start &&
+                  other.end >= m.end &&
+                  other.end - other.start > m.end - m.start,
+              ),
+          )
+          .map((m) => m.f),
+      );
+      if (matches.size === 1) return [...matches][0];
     }
   }
-  const parts = text.split('=');
-  if (parts.length > 2) return null;
-  const rhs = canonical(parts.at(-1)!);
-  if (!rhs) return null;
-  const lhs = parts.length === 2 ? normalize(parts[0]) : null;
-  const matches = signatures.filter((s) =>
-    s.pairs.some((pair) => (!lhs || pair.lhs === lhs) && pair.rhs === rhs),
-  );
-  return matches.length === 1 ? matches[0].f : null;
+  const matched = new Set<(typeof FORMULAS)[number]>();
+  for (const input of candidates(prompt)) {
+    const parts = input.split('=');
+    if (parts.length > 2) continue;
+    const relation = parts.length === 2 ? equationKey(input) : null;
+    const expression = parts.length === 1 ? expressionKey(input) : null;
+    const rhs = canonical(parts.at(-1)!);
+    const lhs = parts.length === 2 ? normalize(parts[0]) : null;
+    for (const s of signatures) {
+      if (
+        (relation && s.relations.has(relation)) ||
+        (expression && s.expressions.has(expression)) ||
+        (rhs && s.pairs.some((pair) => (!lhs || pair.lhs === lhs) && pair.rhs === rhs))
+      )
+        matched.add(s.f);
+      // A descriptive left side, such as “kinetic energy = ½mv²”, is also supported.
+      if (parts.length === 2 && s.names.includes(nameKey(parts[0]))) {
+        if (
+          s.pairs.some((pair) => {
+            const key = equationKey(pair.lhs + '=' + parts[1]);
+            return key && s.relations.has(key);
+          })
+        )
+          matched.add(s.f);
+      }
+    }
+  }
+  return matched.size === 1 ? [...matched][0] : null;
+}
+
+const lessonEquations = [
+  { id: 'gravitational-attraction' as const, equations: ['F=G*m1*m2/r^2'] },
+  {
+    id: 'wave-interference' as const,
+    equations: ['y=y1+y2', 'y=A1*sin(k*x-2*pi*f*t)+A2*sin(k*x-2*pi*f*t+phi)'],
+  },
+  { id: 'gradient-descent' as const, equations: ['L=(w-3)^2', 'w_next=w-eta*2*(w-3)'] },
+].map((lesson) => ({
+  ...lesson,
+  keys: new Set(lesson.equations.map(equationKey).filter(Boolean)),
+}));
+
+export function matchLessonEquation(prompt: string) {
+  const matches = new Set<(typeof lessonEquations)[number]['id']>();
+  for (const input of candidates(prompt)) {
+    const key = equationKey(input);
+    if (key) for (const lesson of lessonEquations) if (lesson.keys.has(key)) matches.add(lesson.id);
+  }
+  return matches.size === 1 ? [...matches][0] : null;
 }
 
 export type InputReview =

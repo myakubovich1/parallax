@@ -80,7 +80,7 @@ export function CatalogWorkspace({
       </header>
       <div className="catalog-heading">
         <div>
-          <p className="instrument-label">{f.category} / Preloaded visual experiment</p>
+          <p className="instrument-label">{f.category} / Interactive experiment</p>
           <h1>{f.title}</h1>
           <p className="catalog-takeaway">{f.explain}</p>
           <p className="catalog-limit">{f.assumptions[0]}</p>
@@ -280,7 +280,7 @@ export function CatalogWorkspace({
                     <li key={i}>{s}</li>
                   ))}
                   <li>
-                    Scenes are authored explanations. Diagram sizes, particle counts, and playback
+                    Visuals are explanatory models. Diagram sizes, particle counts, and playback
                     speed may be rescaled for visibility. Readouts use the displayed formula and
                     units.
                   </li>

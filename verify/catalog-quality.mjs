@@ -43,12 +43,8 @@ try {
     return FORMULAS.map((f) => ({ id: f.id, title: f.title, params: f.params }));
   });
   for (const f of formulas) {
-    await page.getByRole('button', { name: /50 experiments/ }).click();
-    await page.getByRole('searchbox').fill(f.title);
-    await page
-      .locator('.library-card')
-      .filter({ has: page.getByText(f.title, { exact: true }) })
-      .click();
+    await page.locator('#concept').fill(f.title);
+    await page.getByRole('button', { name: 'Create experiment', exact: true }).click();
     await page.locator('.catalog-canvas').waitFor();
     for (const end of ['default', 'min', 'max']) {
       for (const d of f.params) await page.locator(`#generated-${d.id}`).fill(String(d[end]));

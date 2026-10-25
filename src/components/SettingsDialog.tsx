@@ -34,7 +34,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
       <div className="setting stack">
         <p className="setting-name">Your lessons</p>
         <p className="muted small">
-          Example lessons run in your browser. Custom questions go to the server’s configured AI provider. Saved experiments and preferences stay in this browser.
+          Your input may be processed by the configured AI service. Saved experiments and preferences stay in this browser.
         </p>
       </div>
       {foundEggs().length > 0 && (

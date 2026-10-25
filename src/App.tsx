@@ -202,7 +202,6 @@ export default function App() {
           onRetry={() => void create()}
           onConfirmInput={(text) => { setPrompt(text); void create(text); }}
           onEditInput={() => { setGen({ status: 'idle' }); inputRef.current?.focus(); }}
-          onOpenFormula={id => { abortRef.current?.abort(); setGen({ status: 'idle' }); setScreen({kind:'preloaded',id,mode,key:keyRef.current++}); window.scrollTo(0,0); }}
           onOpenLesson={(id, params) => { setGen({ status: 'idle' }); openLesson(id, mode, params); }}
         />
       ) : screen.kind === 'preloaded' ? (

@@ -1,5 +1,4 @@
 import { forwardRef } from 'react';
-import { FormulaLibrary } from '../components/FormulaLibrary';
 import { ConceptInput } from '../components/ConceptInput';
 import { Icon } from '../components/Icon';
 import { ModeSelector } from '../components/ModeSelector';
@@ -30,7 +29,6 @@ interface Props {
   onConfirmInput: (text: string) => void;
   onEditInput: () => void;
   onOpenLesson: (id: ConceptId, params?: Params) => void;
-  onOpenFormula: (id: string) => void;
 }
 
 const EXAMPLES: { id: ConceptId; label: string }[] = [
@@ -96,10 +94,9 @@ export const EntryScreen = forwardRef<HTMLTextAreaElement, Props>(function Entry
           <WavePreview onOpen={(params) => onOpenLesson('wave-interference', params)} />
         </section>
       </div>
-      <FormulaLibrary onSelect={id => { const builtin = LESSONS.find(l => l.id === id); if (builtin) onOpenLesson(builtin.id); else props.onOpenFormula(id); }}/>
       <footer className="entry-foot">
         <span className="instrument-label">Less memorizing. More understanding.</span>
-        <span className="muted small">50 preloaded formulas. Explore further with AI.</span>
+        <span className="muted small">Ask a question. Change a variable. See what follows.</span>
       </footer>
     </main>
   );
@@ -144,7 +141,7 @@ function GenerationStatus({ gen, onCancel, onRetry, onOpenLesson }: Pick<Props, 
       <span className="reg br" aria-hidden="true" />
       <p className="instrument-label">Couldn’t build this experiment</p>
       <p>
-        Parallax couldn’t turn “{gen.prompt.length > 80 ? `${gen.prompt.slice(0, 80)}…` : gen.prompt}” into an experiment. Try phrasing it as a formula or a question, or open one of these example lessons:
+        Parallax couldn’t turn “{gen.prompt.length > 80 ? `${gen.prompt.slice(0, 80)}…` : gen.prompt}” into an experiment. Try phrasing it as a formula or a question, or explore one of these topics:
       </p>
       <div className="examples">
         {LESSONS.map((l) => (

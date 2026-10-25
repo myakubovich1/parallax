@@ -76,7 +76,7 @@ check('Follow-up "Make the waves cancel" sets cancellation', (await val(p, '#ran
 check('Readout reports complete cancellation', (await text(p, '.readouts')).includes('Complete cancellation'));
 await p.fill('#followup', 'what is the meaning of life');
 await p.press('#followup', 'Enter');
-check('Unsupported follow-up is honest', (await text(p, '.followup-reply')).includes('built-in actions'));
+check('Unsupported follow-up is honest', (await text(p, '.followup-reply')).includes('Try one of these follow-ups'));
 
 // Mode switch keeps parameters
 await p.click('.ws-header .mode-option:has-text("Build from basics")');

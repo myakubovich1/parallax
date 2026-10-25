@@ -22,6 +22,7 @@ try {
     return FORMULAS.map((f) => ({
       id: f.id,
       title: f.title,
+      equation: f.equation,
       first: f.params[0],
       minOutput: formatValue(
         f.calculate({
@@ -37,14 +38,30 @@ try {
       ),
     }));
   });
+  assert.equal(await page.locator('.formula-library,.library-card').count(), 0);
+  assert.doesNotMatch(
+    await page.locator('body').innerText(),
+    /preloaded|authored example|browse library/i,
+  );
+  for (const prompt of ['p=w/t', 'P = W / t', 'W=Pt', 't=W/P', 'Please explain P=W/t']) {
+    await page.locator('#concept').fill(prompt);
+    await page.getByRole('button', { name: 'Create experiment', exact: true }).click();
+    await page.getByRole('heading', { name: 'Mechanical power', exact: true }).waitFor();
+    assert.equal(await page.locator('.catalog-canvas').count(), 1);
+    assert.equal(await page.locator('iframe').count(), 0);
+    assert.doesNotMatch(
+      await page.locator('main').innerText(),
+      /preloaded|authored example|library/i,
+    );
+    if (prompt === 'p=w/t') {
+      await page.waitForFunction(() => !document.querySelector('body > canvas'));
+      await page.screenshot({ path: 'verify/screens/premium-power-input.png', fullPage: true });
+    }
+    await page.getByRole('button', { name: 'Back to start' }).click();
+  }
   for (const f of formulas) {
-    await page.getByRole('button', { name: /50 experiments/ }).click();
-    assert.equal(await page.locator('.library-card').count(), 50);
-    await page.getByRole('searchbox').fill(f.title);
-    await page
-      .locator('.library-card')
-      .filter({ has: page.getByText(f.title, { exact: true }) })
-      .click();
+    await page.locator('#concept').fill(f.equation);
+    await page.getByRole('button', { name: 'Create experiment', exact: true }).click();
     await page.getByRole('heading', { name: f.title, exact: true }).waitFor();
     assert.equal(await page.evaluate(() => scrollY), 0, 'New experiments open at the top');
     for (const [value, expected] of [
@@ -52,7 +69,13 @@ try {
       [f.first.max, f.maxOutput],
     ]) {
       await page.locator(`#generated-${f.first.id}`).fill(String(value));
-      assert.equal(await page.locator(`#generated-${f.first.id}`).evaluate(el => parseFloat(getComputedStyle(el).getPropertyValue('--fill'))), value === f.first.min ? 0 : 100, f.id + ' slider fill');
+      assert.equal(
+        await page
+          .locator(`#generated-${f.first.id}`)
+          .evaluate((el) => parseFloat(getComputedStyle(el).getPropertyValue('--fill'))),
+        value === f.first.min ? 0 : 100,
+        f.id + ' slider fill',
+      );
       assert.ok(
         (await page.locator('.catalog-readout strong').first().textContent()).includes(expected),
         f.id + ' readout',
@@ -73,7 +96,7 @@ try {
       await page.getByRole('button', { name: 'Reset values' }).click();
       await page.evaluate(() => document.fonts.ready);
       await page.evaluate(() => window.scrollTo(0, 0));
-      await page.waitForFunction(()=>document.querySelectorAll('body > canvas').length===0);
+      await page.waitForFunction(() => document.querySelectorAll('body > canvas').length === 0);
       await page.screenshot({ path: `verify/screens/library-${f.id}.png`, fullPage: true });
     }
     await page.getByRole('button', { name: 'Back to start' }).click();
@@ -92,16 +115,19 @@ try {
   await page.getByRole('button', { name: 'Open', exact: true }).click();
   assert.equal(await page.locator('#generated-v').inputValue(), '8');
   await page.getByRole('button', { name: 'Pause animation', exact: true }).click();
-  const paused = await page.locator('.catalog-canvas').evaluate(canvas=>canvas.toDataURL());
+  const paused = await page.locator('.catalog-canvas').evaluate((canvas) => canvas.toDataURL());
   await page.waitForTimeout(100);
-  assert.equal(await page.locator('.catalog-canvas').evaluate(canvas=>canvas.toDataURL()), paused);
+  assert.equal(
+    await page.locator('.catalog-canvas').evaluate((canvas) => canvas.toDataURL()),
+    paused,
+  );
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: 'verify/screens/library-mobile.png', fullPage: true });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   assert.equal(calls, 0);
   assert.deepEqual(errors, []);
   console.log(
-    `PASS ${formulas.length} new authored models: browse, sliders at both limits, exact numeric readouts, finite SVGs, formula aliases, save/reload/reopen, pause, mobile, zero API calls.`,
+    `PASS ${formulas.length} premium models: equation submission, sliders at both limits, exact numeric readouts, finite SVGs, formula aliases, save/reload/reopen, pause, mobile, zero API calls.`,
   );
 } finally {
   await browser.close();

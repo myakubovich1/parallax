@@ -219,7 +219,7 @@ export function LessonWorkspace({ lesson, initialMode, initialParams, onExit, on
     if (!fu) {
       return setReply({
         kind: 'unsupported',
-        text: `This example lesson’s follow-up box runs its built-in actions: ${lesson.followUps.map((f) => `“${f.label}”`).join(', ')}. To explore a different idea, ask on the start page.`,
+        text: `Try one of these follow-ups: ${lesson.followUps.map((f) => `“${f.label}”`).join(', ')}. To explore a different idea, ask on the start page.`,
       });
     }
     const action = fu.run(paramsRef.current);
@@ -287,7 +287,7 @@ export function LessonWorkspace({ lesson, initialMode, initialParams, onExit, on
           <Icon name="back" size={16} /> <span>Start</span>
         </button>
         <div className="ws-title">
-          <span className="instrument-label">{lesson.kicker} · <span className="demo-tag">Authored example</span></span>
+          <span className="instrument-label">{lesson.kicker} · <span className="demo-tag">Interactive experiment</span></span>
           <h1>{lesson.title}</h1>
         </div>
         <ModeSelector value={mode} onChange={changeMode} compact name="ws-mode" />
