@@ -1,10 +1,10 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useClockDraw, type SimClock } from '../lib/clock';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import type { SimClock } from '../lib/clock';
 import { fixed } from '../lib/format';
-import { WAVELENGTH_M, WAVE_NUMBER, phaseOffsetMeters, resultantAmplitude, y1, y2, yTotal, type WaveParams } from '../lib/physics/wave';
+import { claimFlight, fly, leaveFlight, observerParams, type FlightRect } from '../lib/observerFlight';
+import { WAVELENGTH_M, WAVE_NUMBER, classify, phaseOffsetMeters, resultantAmplitude, y1, y2, yTotal, type WaveParams } from '../lib/physics/wave';
 import { C, MONO, seeded } from './palette';
 import { fillMath } from './WaveRenderer';
-import { claimFlight, fly, leaveFlight, observerParams, type FlightRect } from '../lib/observerFlight';
 
 /**
  * Entry-screen "observer": a dot-matrix android whose two eyes are the two source
@@ -18,6 +18,14 @@ export const EYE = { x: 0.325, v: -0.1, hw: 0.285, hh: 0.14, r: 0.05 };
 const EYE_SPAN_M = 2 * WAVELENGTH_M;
 export const HIGHLIGHT = '#ECFFB8';
 const PIXEL = "'VT323', 'IBM Plex Mono', monospace";
+/** Probe positions (m) shared by the eyes, the mouth and the swatch columns. */
+const PROBES = [1 / 6, 0.5, 5 / 6, 7 / 6, 1.5, 11 / 6];
+const ENTRANCE_MS = 250;
+const PULSE_MS = 220;
+const GLOW_FADE_MS = 200;
+const IDLE_FRAME_MS = 1000 / 30;
+
+const STATE_TEXT = { constructive: 'CONSTRUCTIVE', partial: 'PARTIAL', destructive: 'DESTRUCTIVE', cancellation: 'CANCELLED' } as const;
 
 interface Props {
   params: WaveParams;
@@ -25,6 +33,10 @@ interface Props {
   focus: string | null;
   effects: boolean;
   reducedMotion: boolean;
+  /** Direct manipulation: dragging the wave in the right eye sets φ. */
+  onPhase?: (phi: number) => void;
+  /** The phase slider, so circuit traces can run from its thumb into the head. */
+  sliderRef?: RefObject<HTMLInputElement>;
 }
 
 export interface Rect { x: number; y: number; w: number; h: number }
@@ -50,11 +62,22 @@ const sdRoundBox = (px: number, py: number, bx: number, by: number, r: number) =
   const qy = Math.abs(py) - by + r;
   return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r;
 };
+const sdSegment = (px: number, py: number, ax: number, ay: number, bx: number, by: number) => {
+  const vx = bx - ax, vy = by - ay;
+  const t = Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / (vx * vx + vy * vy)));
+  return Math.hypot(px - ax - vx * t, py - ay - vy * t);
+};
+/** Interleaved gradient noise: cheap, blue-noise-like jitter for the halftone. */
+const ign = (x: number, y: number) => {
+  const a = 0.06711056 * x + 0.00583715 * y;
+  const b = 52.9829189 * (a - Math.floor(a));
+  return b - Math.floor(b);
+};
 
 function geometry(W: number, H: number, yaw: number, pitch: number): Geometry {
   const narrow = W < 520;
-  const S = Math.max(60, Math.min((H - 20) / 1.74, narrow ? (W - 8) / 1.36 : (W - 128) / 1.62));
-  const cy = Math.max(20 + 0.92 * S, (H - 1.74 * S) / 2 + 0.92 * S);
+  const S = Math.max(60, Math.min((H - 16) / 1.96, narrow ? (W - 8) / 1.36 : (W - 128) / 1.62));
+  const cy = Math.max(14 + 0.96 * S, (H - 1.96 * S) / 2 + 0.96 * S);
   return headGeometry(W, H, S, W / 2, cy, yaw, pitch, { pad: 7, swatches: !narrow && W > 600, parallax: 1 });
 }
 
@@ -88,46 +111,69 @@ export function headGeometry(
   return { W, H, S, cx, cy, unit, pxPerM: (eyes[0].w - 2 * pad) / EYE_SPAN_M, eyes, mouth, mouthV, mouthHH, swatches, pad, parallax };
 }
 
-/** Height field of the head in face units. region: 0 none, 1 shell, 2 eye screen, 3 mouth screen. */
-export function sampleHead(u: number, v: number, yaw: number, pitch: number, g: Geometry): [number, number] {
-  const rx = v > 0.1 ? 0.74 - (v - 0.1) * 0.45 : 0.74;
+/**
+ * Height field of the head in face units at rest.
+ * region: 0 none, 1 shell, 2 eye screen, 3 mouth screen.
+ */
+export function sampleHead(u: number, v: number, g: Geometry): [number, number] {
+  const au = Math.abs(u);
+  const rx = v > 0.1 ? 0.74 - (v - 0.1) * 0.5 : 0.74;
   const e = (u / rx) ** 2 + ((v + 0.12) / 0.82) ** 2;
   if (e >= 1) {
-    const au = Math.abs(u);
-    const ear = sdRoundBox(au - 0.76, v - EYE.v, 0.06, 0.16, 0.03);
+    // Ear modules: slatted housings with a window for the LED strip.
+    const ear = sdRoundBox(au - 0.765, v - EYE.v, 0.065, 0.17, 0.035);
     if (ear < 0) {
-      const slat = Math.floor((v - EYE.v + 0.16) / 0.05) % 2 === 0 ? 0 : -0.05;
-      return [0.5 + slat + Math.min(0.12, -ear * 2.5), 1];
+      const led = Math.abs(v - EYE.v) < 0.07 && Math.abs(au - 0.765) < 0.022;
+      const slat = !led && Math.floor((v - EYE.v + 0.17) / 0.045) % 2 === 1 ? -0.06 : 0;
+      return [0.46 + slat + Math.min(0.12, -ear * 2.5) - (led ? 0.14 : 0), 1];
     }
-    if (v > 0.55 && v < 1.0 && au < 0.27) {
-      const ring = Math.floor((v - 0.55) / 0.065) % 2 === 0 ? 0 : -0.07;
-      return [0.5 * Math.sqrt(1 - (u / 0.27) ** 2) + ring, 1];
+    // Neck tapers into a collar ring.
+    if (v > 0.58 && v < 0.86) {
+      const w = 0.21 - (v - 0.58) * 0.12;
+      if (au < w) {
+        const ring = Math.floor((v - 0.58) / 0.05) % 2 === 1 ? -0.05 : 0;
+        return [0.42 * Math.sqrt(1 - (u / w) ** 2) + ring, 1];
+      }
+    }
+    const collar = sdRoundBox(u, v - 0.93, 0.46, 0.075, 0.06);
+    if (collar < 0) {
+      const bevel = Math.min(0.14, -collar * 2.2);
+      const notch = au < 0.05 && v < 0.9 ? -0.08 : 0;
+      return [0.28 + bevel + notch - au * 0.12, 1];
     }
     return [0, 0];
   }
   const dome = Math.sqrt(1 - e);
-  const fu = u - yaw * 0.07 * dome;
-  const fv = v - pitch * 0.05 * dome;
   let h = dome * 0.9;
 
+  // Eye sockets are recessed, deeper below the eye, so the cheek beneath falls into shadow;
+  // a raised bezel frames each screen.
   for (const s of [-1, 1]) {
-    const d = sdRoundBox(fu - s * EYE.x, fv - EYE.v, EYE.hw, EYE.hh, EYE.r);
+    const d = sdRoundBox(u - s * EYE.x, v - EYE.v, EYE.hw, EYE.hh, EYE.r);
     if (d < 0) return [h, 2];
-    if (d < 0.028) h += 0.1 * (1 - d / 0.028);
-    else if (d < 0.055) h -= 0.05;
+    const reach = v > EYE.v ? 0.12 : 0.07;
+    if (d < reach) h -= 0.12 * (1 - d / reach) ** 1.6;
+    if (d < 0.026) h += 0.11 * (1 - d / 0.026);
   }
-  const dm = sdRoundBox(fu, fv - g.mouthV, 0.36, g.mouthHH, 0.05);
+  const dm = sdRoundBox(u, v - g.mouthV, 0.36, g.mouthHH, 0.05);
   if (dm < 0) return [h, 3];
-  if (dm < 0.028) h += 0.1 * (1 - dm / 0.028);
-  else if (dm < 0.055) h -= 0.05;
+  if (dm < 0.06) h -= 0.07 * (1 - dm / 0.06) ** 1.6;
+  if (dm < 0.026) h += 0.1 * (1 - dm / 0.026);
 
-  // Brow ridge, panel seams and cheek vents give the shell its machined surface.
-  h += 0.08 * Math.exp(-(((fv - (EYE.v - EYE.hh - 0.07)) / 0.03) ** 2)) * (Math.abs(fu) < 0.66 ? 1 : 0);
-  if (Math.abs(fu) < 0.009 && fv < -0.7) h -= 0.1;
-  if (Math.abs(fv - (EYE.v - EYE.hh - 0.17)) < 0.008 && Math.abs(fu) < 0.42) h -= 0.07;
-  if (Math.abs(fu) > 0.48 && Math.abs(fu) < 0.62 && fv > EYE.v + EYE.hh + 0.06 && fv < EYE.v + EYE.hh + 0.3) {
-    if (Math.floor((fv - EYE.v) / 0.038) % 2 === 0) h -= 0.09;
+  // Cheekbones: angled ridges from the outer eye corner toward the mouth.
+  const top = EYE.v + EYE.hh;
+  for (const s of [-1, 1]) {
+    const dl = sdSegment(u, v, s * 0.66, top + 0.04, s * 0.42, top + 0.2);
+    h += 0.075 * Math.exp(-((dl / 0.035) ** 2));
   }
+  // Chin.
+  const chinV = g.mouthV + g.mouthHH + 0.075;
+  h += 0.08 * Math.exp(-((u / 0.17) ** 2 + ((v - chinV) / 0.045) ** 2));
+  // Forehead plate outline and crown seam: grooves, not ledges.
+  if (Math.abs(sdRoundBox(u, v + 0.53, 0.34, 0.13, 0.08)) < 0.009) h -= 0.06;
+  if (au < 0.009 && v < -0.72) h -= 0.1;
+  // Cheek vents.
+  if (au > 0.5 && au < 0.63 && v > top + 0.08 && v < top + 0.3 && Math.floor((v - EYE.v) / 0.038) % 2 === 0) h -= 0.09;
   return [h, 1];
 }
 
@@ -138,6 +184,7 @@ export interface Field {
   top: number;
   region: Uint8Array;
   dome: Float32Array;
+  ao: Float32Array;
   nx: Float32Array;
   ny: Float32Array;
   nz: Float32Array;
@@ -156,7 +203,8 @@ export function buildField(g: Geometry, dpr: number, cell = CELL): Field {
   const n = cols * rows;
   const f: Field = {
     cols, rows, left, top, cell,
-    region: new Uint8Array(n), dome: new Float32Array(n), nx: new Float32Array(n), ny: new Float32Array(n), nz: new Float32Array(n),
+    region: new Uint8Array(n), dome: new Float32Array(n), ao: new Float32Array(n),
+    nx: new Float32Array(n), ny: new Float32Array(n), nz: new Float32Array(n),
     silhouette: document.createElement('canvas'),
   };
   const sil = f.silhouette;
@@ -166,21 +214,29 @@ export function buildField(g: Geometry, dpr: number, cell = CELL): Field {
   sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   sctx.fillStyle = C.bg;
   const eps = cell / g.S;
-  const tilt = 2.4; // exaggerated relief so the dither carries form, not flat fields
+  const tilt = 2.4; // exaggerated relief so the halftone carries form, not flat fields
+  const eyeBottom = EYE.v + EYE.hh;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const i = r * cols + c;
       const u = ((left + c) * cell - g.cx) / g.S;
       const v = ((top + r) * cell - g.cy) / g.S;
-      const region = sampleHead(u, v, 0, 0, g)[1];
+      const region = sampleHead(u, v, g)[1];
       if (!region) continue;
       f.region[i] = region;
       sctx.fillRect((left + c) * cell, (top + r) * cell, cell, cell);
-      const rx = v > 0.1 ? 0.74 - (v - 0.1) * 0.45 : 0.74;
+      const rx = v > 0.1 ? 0.74 - (v - 0.1) * 0.5 : 0.74;
       f.dome[i] = Math.sqrt(Math.max(0, 1 - (u / rx) ** 2 - ((v + 0.12) / 0.82) ** 2));
+      // Shadow cast by each eye housing onto the cheek below it.
+      let ao = 1;
+      for (const s of [-1, 1]) {
+        const below = v - eyeBottom;
+        if (below > 0 && below < 0.14 && Math.abs(u - s * EYE.x) < EYE.hw + 0.02) ao = Math.min(ao, 0.5 + 0.5 * (below / 0.14));
+      }
+      f.ao[i] = ao;
       if (region > 1) continue;
-      const hx = (sampleHead(u + eps, v, 0, 0, g)[0] - sampleHead(u - eps, v, 0, 0, g)[0]) / (2 * eps);
-      const hy = (sampleHead(u, v + eps, 0, 0, g)[0] - sampleHead(u, v - eps, 0, 0, g)[0]) / (2 * eps);
+      const hx = (sampleHead(u + eps, v, g)[0] - sampleHead(u - eps, v, g)[0]) / (2 * eps);
+      const hy = (sampleHead(u, v + eps, g)[0] - sampleHead(u, v - eps, g)[0]) / (2 * eps);
       const nx = -hx * tilt, ny = -hy * tilt;
       const nn = Math.hypot(nx, ny, 1);
       f.nx[i] = nx / nn;
@@ -190,35 +246,6 @@ export function buildField(g: Geometry, dpr: number, cell = CELL): Field {
   }
   return f;
 }
-
-function buildLayer(layer: HTMLCanvasElement, g: Geometry, f: Field, dpr: number, yaw: number, pitch: number, bloom: boolean, scene = true) {
-  if (layer.width !== Math.round(g.W * dpr) || layer.height !== Math.round(g.H * dpr)) {
-    layer.width = Math.round(g.W * dpr);
-    layer.height = Math.round(g.H * dpr);
-  }
-  const ctx = layer.getContext('2d')!;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, g.W, g.H);
-  if (scene) drawScene(ctx, g, yaw, pitch);
-  drawHead(ctx, g, f, dpr, yaw, pitch, 2);
-
-  if (bloom) {
-    // Phosphor bloom: one blurred additive copy, built only once the head is at rest.
-    const copy = document.createElement('canvas');
-    copy.width = layer.width;
-    copy.height = layer.height;
-    copy.getContext('2d')!.drawImage(layer, 0, 0);
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.38;
-    ctx.filter = `blur(${Math.round(5 * dpr)}px)`;
-    ctx.drawImage(copy, 0, 0);
-    ctx.filter = 'none';
-    ctx.globalCompositeOperation = 'source-over';
-  }
-  ctx.globalAlpha = 1;
-}
-
 
 function drawScene(ctx: CanvasRenderingContext2D, g: Geometry, yaw: number, pitch: number) {
   // Perspective tunnel behind the head; its vanishing point drifts against the head.
@@ -234,11 +261,11 @@ function drawScene(ctx: CanvasRenderingContext2D, g: Geometry, yaw: number, pitc
   ctx.setLineDash([7, 6]);
   ctx.lineWidth = 1.25;
   rects.forEach((r, i) => {
-    ctx.strokeStyle = `rgba(195, 248, 107, ${0.16 + i * 0.06})`;
+    ctx.strokeStyle = `rgba(195, 248, 107, ${0.14 + i * 0.05})`;
     ctx.strokeRect(Math.round(r.x) + 0.5, Math.round(r.y) + 0.5, Math.round(r.w), Math.round(r.h));
   });
   const inner = rects[rects.length - 1];
-  ctx.strokeStyle = 'rgba(195, 248, 107, 0.22)';
+  ctx.strokeStyle = 'rgba(195, 248, 107, 0.18)';
   for (const t of [0, 0.25, 0.5, 0.75, 1]) {
     for (const [ox, oy, ix, iy] of [
       [outer.x + outer.w * t, outer.y, inner.x + inner.w * t, inner.y],
@@ -253,22 +280,23 @@ function drawScene(ctx: CanvasRenderingContext2D, g: Geometry, yaw: number, pitc
     }
   }
   ctx.setLineDash([]);
-
   if (g.swatches) for (const r of swatchRects(g)) {
     ctx.strokeStyle = 'rgba(195, 248, 107, 0.4)';
     ctx.strokeRect(Math.round(r.x) + 0.5, Math.round(r.y) + 0.5, Math.round(r.w), Math.round(r.h));
   }
-
 }
 
-/** Silhouette plus relit dot matrix. Cheap: the surface itself comes from the cached field. */
-export function drawHead(ctx: CanvasRenderingContext2D, g: Geometry, f: Field, dpr: number, yaw: number, pitch: number, dot: number, gain = 1) {
+/**
+ * Silhouette plus relit halftone. Dot size follows brightness (up to one cell), jittered by
+ * blue-noise so shadows read as gradients rather than specks. The surface comes from the cache.
+ */
+export function drawHead(ctx: CanvasRenderingContext2D, g: Geometry, f: Field, dpr: number, yaw: number, pitch: number, gain = 1) {
   // Occlude the tunnel behind the head, shifted with the skull.
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.drawImage(f.silhouette, Math.round(yaw * 0.035 * g.S * g.parallax * dpr), Math.round(pitch * 0.025 * g.S * g.parallax * dpr));
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  // Relight: key light follows the gaze, plus a cool rim from the right and a specular glint.
+  // Key light follows the gaze, plus a cool rim from the right and a specular glint.
   let lx = -0.42 + yaw * 0.6, ly = -0.6 + pitch * 0.5, lz = 0.68;
   const ln = Math.hypot(lx, ly, lz);
   lx /= ln; ly /= ln; lz /= ln;
@@ -277,32 +305,57 @@ export function drawHead(ctx: CanvasRenderingContext2D, g: Geometry, f: Field, d
   hx /= hn; hy /= hn; hz /= hn;
   const lime: number[] = [];
   const glint: number[] = [];
+  const cell = f.cell;
   for (let r = 0; r < f.rows; r++) {
     for (let c = 0; c < f.cols; c++) {
       const i = r * f.cols + c;
       if (f.region[i] !== 1) continue;
       const nx = f.nx[i], ny = f.ny[i], nz = f.nz[i];
       const diffuse = Math.max(0, nx * lx + ny * ly + nz * lz);
-      const spec = Math.max(0, nx * hx + ny * hy + nz * hz) ** 24;
+      const spec = Math.max(0, nx * hx + ny * hy + nz * hz) ** 48;
       const rim = Math.max(0, nx * 0.8 - ny * 0.1) ** 3 * 0.35;
       const d = f.dome[i];
       const fill = Math.max(0, nz * 0.75 + ny * 0.35) * 0.3; // soft fill from below-front
-      const b = gain * (0.03 + 0.82 * diffuse ** 1.9 + fill + rim + 0.55 * spec) * (0.45 + 0.55 * Math.min(1, d * 1.8 + 0.2));
+      const b = gain * f.ao[i] * (0.03 + 0.78 * diffuse ** 1.9 + fill + rim + 0.25 * spec) * (0.45 + 0.55 * Math.min(1, d * 1.8 + 0.2));
       const col = f.left + c, row = f.top + r;
-      if ((BAYER[(row % 4) * 4 + (col % 4)] + 0.5) / 16 >= b) continue;
-      const px = col * f.cell + yaw * 0.07 * d * g.S * g.parallax;
-      const py = row * f.cell + pitch * 0.05 * d * g.S * g.parallax;
-      (b > 0.85 ? glint : lime).push(px, py);
+      const size = cell * Math.min(1, b * 1.1 + (ign(col, row) - 0.5) * 0.28);
+      if (size < cell * 0.22) continue;
+      const o = (cell - size) / 2;
+      const px = col * cell + o + yaw * 0.07 * d * g.S * g.parallax;
+      const py = row * cell + o + pitch * 0.05 * d * g.S * g.parallax;
+      (b > 0.92 ? glint : lime).push(px, py, size);
     }
   }
   ctx.fillStyle = C.lime;
-  ctx.globalAlpha = 0.9;
-  for (let k = 0; k < lime.length; k += 2) ctx.fillRect(lime[k], lime[k + 1], dot, dot);
+  ctx.globalAlpha = 0.92;
+  for (let k = 0; k < lime.length; k += 3) ctx.fillRect(lime[k], lime[k + 1], lime[k + 2], lime[k + 2]);
   ctx.fillStyle = HIGHLIGHT;
   ctx.globalAlpha = 1;
-  for (let k = 0; k < glint.length; k += 2) ctx.fillRect(glint[k], glint[k + 1], dot, dot);
-
+  for (let k = 0; k < glint.length; k += 3) ctx.fillRect(glint[k], glint[k + 1], glint[k + 2], glint[k + 2]);
   ctx.globalAlpha = 1;
+}
+
+function buildLayer(layer: HTMLCanvasElement, g: Geometry, f: Field, dpr: number, yaw: number, pitch: number, scene = true) {
+  if (layer.width !== Math.round(g.W * dpr) || layer.height !== Math.round(g.H * dpr)) {
+    layer.width = Math.round(g.W * dpr);
+    layer.height = Math.round(g.H * dpr);
+  }
+  const ctx = layer.getContext('2d')!;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, g.W, g.H);
+  if (scene) drawScene(ctx, g, yaw, pitch);
+  drawHead(ctx, g, f, dpr, yaw, pitch);
+}
+
+/** Phosphor bloom: a blurred copy of the layer, built only once the head is at rest. */
+function buildBloom(bloom: HTMLCanvasElement, layer: HTMLCanvasElement, dpr: number) {
+  bloom.width = layer.width;
+  bloom.height = layer.height;
+  const ctx = bloom.getContext('2d')!;
+  ctx.clearRect(0, 0, bloom.width, bloom.height);
+  ctx.filter = `blur(${Math.round(5 * dpr)}px)`;
+  ctx.drawImage(layer, 0, 0);
+  ctx.filter = 'none';
 }
 
 function swatchRects(g: Geometry): Rect[] {
@@ -313,6 +366,27 @@ function swatchRects(g: Geometry): Rect[] {
     out.push({ x: side ? g.W - 24 - size : 24, y: 82 + i * (size + gap), w: size, h: size });
   }
   return out;
+}
+
+/** 17 ordered-dither levels per colour and size, rendered once and blitted per frame. */
+const tileCache = new Map<string, HTMLCanvasElement>();
+function swatchTile(color: string, level: number, size: number, dpr: number) {
+  const key = `${color}|${level}|${size}|${dpr}`;
+  let tile = tileCache.get(key);
+  if (tile) return tile;
+  tile = document.createElement('canvas');
+  tile.width = Math.round(size * dpr);
+  tile.height = Math.round(size * dpr);
+  const ctx = tile.getContext('2d')!;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = color;
+  ctx.globalAlpha = 0.8;
+  const cells = Math.floor((size - 2) / 3);
+  for (let y = 0; y < cells; y++) for (let x = 0; x < cells; x++) {
+    if (BAYER[(y % 4) * 4 + (x % 4)] < level) ctx.fillRect(1 + x * 3, 1 + y * 3, 2, 2);
+  }
+  tileCache.set(key, tile);
+  return tile;
 }
 
 const roundRectPath = (ctx: CanvasRenderingContext2D, r: Rect, rad: number) => {
@@ -336,14 +410,16 @@ function drawScreen(
   color: string,
   particles: Particle[],
   effects: boolean,
+  pulse: number,
 ) {
-  const spanM = (r.w - 12) / g.pxPerM;
-  const x0 = r.x + 6;
+  const spanM = (r.w - 2 * g.pad) / g.pxPerM;
+  const x0 = r.x + g.pad;
   const mid = r.y + r.h / 2;
   const X = (x: number) => x0 + x * g.pxPerM;
+  const rad = Math.max(4, EYE.r * g.S);
 
   ctx.save();
-  roundRectPath(ctx, r, Math.max(4, EYE.r * g.S));
+  roundRectPath(ctx, r, rad);
   ctx.fillStyle = '#030605';
   ctx.fill();
   ctx.clip();
@@ -354,7 +430,7 @@ function drawScreen(
   ctx.lineWidth = 1;
   for (let q = 0; q <= spanM * 4; q++) {
     const x = Math.round(X(q * 0.25)) + 0.5;
-    ctx.globalAlpha = q % 4 === 0 ? 1.6 : 0.7;
+    ctx.globalAlpha = q % 4 === 0 ? 1 : 0.6;
     ctx.beginPath();
     ctx.moveTo(x, r.y);
     ctx.lineTo(x, r.y + r.h);
@@ -371,11 +447,11 @@ function drawScreen(
 
   ctx.fillStyle = color;
   const cols = Math.round(spanM * 24);
+  ctx.globalAlpha = 0.3;
   for (let i = 0; i <= cols; i++) {
     const x = (i / cols) * spanM;
     const disp = fn(x) * g.unit;
     const n = Math.floor(Math.abs(disp) / 3);
-    ctx.globalAlpha = 0.3;
     for (let d = 1; d <= n; d++) ctx.fillRect(X(x) - 0.6, mid - Math.sign(disp) * d * 3 - 0.6, 1.2, 1.2);
   }
   ctx.globalCompositeOperation = effects ? 'lighter' : 'source-over';
@@ -393,7 +469,7 @@ function drawScreen(
     ctx.shadowBlur = 9;
   }
   ctx.beginPath();
-  for (let px = 0; px <= r.w - 12; px += 1.5) {
+  for (let px = 0; px <= r.w - 2 * g.pad; px += 1.5) {
     const y = mid - fn(px / g.pxPerM) * g.unit;
     px === 0 ? ctx.moveTo(x0 + px, y) : ctx.lineTo(x0 + px, y);
   }
@@ -401,195 +477,236 @@ function drawScreen(
   ctx.shadowBlur = 0;
   ctx.restore();
 
-  // Bezel with registration corners.
+  // Bezel; brightens briefly when the phase changes.
   ctx.strokeStyle = color;
-  ctx.globalAlpha = 0.7;
-  ctx.lineWidth = 1;
-  roundRectPath(ctx, { x: r.x + 0.5, y: r.y + 0.5, w: r.w - 1, h: r.h - 1 }, Math.max(4, EYE.r * g.S));
+  ctx.globalAlpha = 0.7 + 0.3 * pulse;
+  ctx.lineWidth = 1 + 1.5 * pulse;
+  if (effects && pulse > 0) {
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 14 * pulse;
+  }
+  roundRectPath(ctx, { x: r.x + 0.5, y: r.y + 0.5, w: r.w - 1, h: r.h - 1 }, rad);
   ctx.stroke();
+  ctx.shadowBlur = 0;
   ctx.globalAlpha = 1;
   return { X, mid };
 }
 
-export function ObserverHead({ params: p, clock, focus, effects, reducedMotion }: Props) {
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const layerRef = useRef<HTMLCanvasElement | null>(null);
-  const fieldRef = useRef<{ field: Field; W: number; H: number; dpr: number } | null>(null);
-  const built = useRef({ yaw: NaN, pitch: NaN, W: 0, H: 0, bloom: false });
-  const moving = useRef(false);
-  const look = useRef({ yaw: 0, pitch: 0, ty: 0, tp: 0 });
-  const [size, setSize] = useState({ w: 0, h: 0 });
-  const [hidden, setHidden] = useState(false);
-  const arriving = useRef<FlightRect | null>(null);
+/** A polyline with a stroked length, so a pulse can travel along it. */
+interface Trace { pts: [number, number][]; len: number }
+const makeTrace = (pts: [number, number][]): Trace => {
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+  return { pts, len };
+};
+const pointAt = (t: Trace, d: number): [number, number] => {
+  for (let i = 1; i < t.pts.length; i++) {
+    const [ax, ay] = t.pts[i - 1], [bx, by] = t.pts[i];
+    const seg = Math.hypot(bx - ax, by - ay);
+    if (d <= seg) return [ax + ((bx - ax) * d) / seg, ay + ((by - ay) * d) / seg];
+    d -= seg;
+  }
+  return t.pts[t.pts.length - 1];
+};
 
-  const particles = useMemo<Particle[]>(() => {
-    const rnd = seeded(11);
-    return Array.from({ length: 150 }, (_, i) => ({ x: ((i + rnd()) / 150) * 3, o: rnd() * 2 - 1 }));
-  }, []);
-
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(([e]) => setSize({ w: Math.round(e.contentRect.width), h: Math.round(e.contentRect.height) }));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const draw = () => {
-    const canvas = canvasRef.current;
-    if (!canvas || !size.w) return;
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    if (canvas.width !== size.w * dpr || canvas.height !== size.h * dpr) {
-      canvas.width = size.w * dpr;
-      canvas.height = size.h * dpr;
-    }
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const { yaw, pitch } = look.current;
-    const g = geometry(size.w, size.h, yaw, pitch);
-    const b = built.current;
-    if (!layerRef.current) layerRef.current = document.createElement('canvas');
-    const fc = fieldRef.current;
-    if (!fc || fc.W !== size.w || fc.H !== size.h || fc.dpr !== dpr) {
-      fieldRef.current = { field: buildField(geometry(size.w, size.h, 0, 0), dpr), W: size.w, H: size.h, dpr };
-      built.current.W = 0;
-    }
-    const bloom = effects && !moving.current;
-    if (b.W !== size.w || b.H !== size.h || b.bloom !== bloom || Math.abs(b.yaw - yaw) > 0.004 || Math.abs(b.pitch - pitch) > 0.004) {
-      buildLayer(layerRef.current, g, fieldRef.current!.field, dpr, yaw, pitch, bloom);
-      built.current = { yaw, pitch, W: size.w, H: size.h, bloom };
-    }
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(layerRef.current, 0, 0);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    paintLive(ctx, g, p, clock.t, particles, focus, effects);
-  };
-  useClockDraw(clock, draw, [size, p.A1, p.A2, p.f, p.phi, focus, effects]);
-
-  // The head turns toward the pointer, then settles. Off under reduced motion.
-  const drawRef = useRef(draw);
-  drawRef.current = draw;
-  useEffect(() => {
-    if (reducedMotion) {
-      look.current = { yaw: 0, pitch: 0, ty: 0, tp: 0 };
-      drawRef.current();
-      return;
-    }
-    let raf = 0;
-    const tick = () => {
-      const l = look.current;
-      l.yaw += (l.ty - l.yaw) * 0.12;
-      l.pitch += (l.tp - l.pitch) * 0.12;
-      const settling = Math.abs(l.ty - l.yaw) + Math.abs(l.tp - l.pitch) > 0.002;
-      moving.current = settling;
-      drawRef.current();
-      raf = settling ? requestAnimationFrame(tick) : 0;
-    };
-    const move = (e: PointerEvent) => {
-      const el = wrapRef.current;
-      if (!el || e.pointerType === 'touch') return;
-      const r = el.getBoundingClientRect();
-      const clamp = (n: number) => Math.max(-1, Math.min(1, n));
-      look.current.ty = clamp((e.clientX - (r.left + r.width / 2)) / (r.width * 0.9));
-      look.current.tp = clamp((e.clientY - (r.top + r.height * 0.42)) / (r.height * 0.9));
-      if (!raf) raf = requestAnimationFrame(tick);
-    };
-    const leave = () => {
-      look.current.ty = 0;
-      look.current.tp = 0;
-      if (!raf) raf = requestAnimationFrame(tick);
-    };
-    window.addEventListener('pointermove', move, { passive: true });
-    document.documentElement.addEventListener('pointerleave', leave);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener('pointermove', move);
-      document.documentElement.removeEventListener('pointerleave', leave);
-    };
-  }, [reducedMotion]);
-
-  // The docked miniature keeps showing whatever phase the learner left here.
-  useEffect(() => {
-    Object.assign(observerParams, p);
-  }, [p]);
-
-  /** Head only (no tunnel, probes or serial), cropped to HEAD_BOX, in viewport coordinates. */
-  const snapshot = (): { image: HTMLCanvasElement; rect: FlightRect } | null => {
-    const el = wrapRef.current;
-    const fc = fieldRef.current;
-    if (!el || !fc) return null;
-    const { yaw, pitch } = look.current;
-    const g = geometry(fc.W, fc.H, yaw, pitch);
-    const layer = document.createElement('canvas');
-    buildLayer(layer, g, fc.field, fc.dpr, yaw, pitch, false, false);
-    const lctx = layer.getContext('2d')!;
-    lctx.setTransform(fc.dpr, 0, 0, fc.dpr, 0, 0);
-    paintLive(lctx, g, p, clock.t, particles, null, effects, true);
-    const box = headBox(geometry(fc.W, fc.H, 0, 0));
-    const out = document.createElement('canvas');
-    out.width = Math.round(box.w * fc.dpr);
-    out.height = Math.round(box.h * fc.dpr);
-    out.getContext('2d')!.drawImage(layer, box.x * fc.dpr, box.y * fc.dpr, box.w * fc.dpr, box.h * fc.dpr, 0, 0, out.width, out.height);
-    const r = el.getBoundingClientRect();
-    return { image: out, rect: { x: r.left + box.x, y: r.top + box.y, w: box.w, h: box.h } };
-  };
-  const snapshotRef = useRef(snapshot);
-  snapshotRef.current = snapshot;
-
-  // Leaving the entry screen: hand the head to the top bar. Returning: wait for it to land.
-  useLayoutEffect(() => {
-    if (!reducedMotion) {
-      const back = claimFlight('undock');
-      if (back) {
-        arriving.current = back.from;
-        setHidden(true);
-      }
-    }
-    return () => {
-      if (reducedMotionRef.current) return;
-      const shot = snapshotRef.current();
-      if (shot) leaveFlight('dock', shot.rect, shot.image);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  const reducedMotionRef = useRef(reducedMotion);
-  reducedMotionRef.current = reducedMotion;
-
-  useEffect(() => {
-    const from = arriving.current;
-    if (!from || !size.w || !fieldRef.current) return;
-    arriving.current = null;
-    const shot = snapshotRef.current();
-    if (!shot) return setHidden(false);
-    void fly(shot.image, from, shot.rect).then(() => setHidden(false));
-  }, [size]);
-
-  const AR = resultantAmplitude(p);
-  const label = `Live wave model drawn as a dot-matrix robot face. Left eye: wave 1, amplitude ${fixed(p.A1)}. Right eye: wave 2, amplitude ${fixed(p.A2)}, shifted by ${fixed(p.phi, 0)} degrees. Mouth: their sum, amplitude ${fixed(AR)}.`;
-  return (
-    <div className={`stage-canvas observer${hidden ? ' awaiting' : ''}`} ref={wrapRef}>
-      <canvas ref={canvasRef} role="img" aria-label={label} style={{ width: size.w, height: size.h }} />
-    </div>
-  );
+interface LiveState {
+  t: number;
+  now: number;
+  focus: string | null;
+  effects: boolean;
+  pulse: number; // 1 → 0 after a phase change
+  pulseTravel: number; // 0 → 1 along the circuit trace, or -1 when idle
+  brow: number; // eased expression, −1 calm … 1 delighted
+  thumbX: number | null;
+  hoverEye: boolean;
+  dragging: boolean;
+  headOnly: boolean;
+  dpr: number;
 }
 
-function paintLive(ctx: CanvasRenderingContext2D, g: Geometry, p: WaveParams, t: number, particles: Particle[], focus: string | null, effects: boolean, headOnly = false) {
+function paintLive(ctx: CanvasRenderingContext2D, g: Geometry, p: WaveParams, particles: Particle[], s: LiveState) {
+  const { t, effects } = s;
   const AR = resultantAmplitude(p);
   const compact = g.W < 520;
   const [L, R] = g.eyes;
+  const M = g.mouth;
+  const strong = s.focus === 'phi' || s.dragging;
+
+  // Circuit traces: from the phase slider's thumb, up through the collar and neck, to the right eye.
+  if (!s.headOnly && s.thumbX !== null) {
+    const tx = Math.max(8, Math.min(g.W - 8, s.thumbX));
+    const neckX = g.cx + 0.1 * g.S;
+    const jawY = g.cy + 0.6 * g.S;
+    const cheekX = R.x + R.w * 0.62;
+    const trace = makeTrace([
+      [tx, g.H],
+      [tx, g.H - 12],
+      [neckX + (tx > neckX ? 12 : -12), g.H - 12],
+      [neckX, g.H - 24],
+      [neckX, jawY],
+      [cheekX, R.y + R.h + 26],
+      [cheekX, R.y + R.h],
+    ]);
+    ctx.lineJoin = 'round';
+    for (const [off, a] of [[-1.5, 0.45], [1.5, 0.22]] as const) {
+      ctx.strokeStyle = `rgba(195, 248, 107, ${a + 0.35 * s.pulse})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      trace.pts.forEach(([x, y], i) => (i ? ctx.lineTo(x + off, y) : ctx.moveTo(x + off, y)));
+      ctx.stroke();
+    }
+    ctx.fillStyle = C.bg;
+    ctx.strokeStyle = 'rgba(195, 248, 107, 0.7)';
+    for (const [x, y] of trace.pts.slice(1, -1)) {
+      ctx.beginPath();
+      ctx.arc(x, y, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    if (s.pulseTravel >= 0) {
+      const d = s.pulseTravel * trace.len;
+      ctx.fillStyle = HIGHLIGHT;
+      if (effects) {
+        ctx.shadowColor = C.lime;
+        ctx.shadowBlur = 12;
+      }
+      for (let k = 0; k < 6; k++) {
+        const [x, y] = pointAt(trace, Math.max(0, d - k * 5));
+        ctx.globalAlpha = 1 - k / 6;
+        ctx.fillRect(x - 2, y - 2, 4, 4);
+      }
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+    }
+  }
+
+  // Probe buses: the left eye feeds the y₁ swatches, the mouth feeds the y swatches.
+  const swatches = g.swatches && !s.headOnly ? swatchRects(g) : [];
+  if (swatches.length) {
+    ctx.lineWidth = 1;
+    PROBES.forEach((x, i) => {
+      const lx = L.x + g.pad + x * g.pxPerM;
+      const sw = swatches[i];
+      const busY = L.y + L.h + 7 + i * 3;
+      ctx.strokeStyle = 'rgba(195, 248, 107, 0.22)';
+      ctx.beginPath();
+      ctx.moveTo(lx, L.y + L.h - 3);
+      ctx.lineTo(lx, busY);
+      ctx.lineTo(sw.x + sw.w + 12 + i * 3, busY);
+      ctx.lineTo(sw.x + sw.w + 12 + i * 3, sw.y + sw.h / 2);
+      ctx.lineTo(sw.x + sw.w, sw.y + sw.h / 2);
+      ctx.stroke();
+      const mx = M.x + g.pad + x * g.pxPerM;
+      const rs = swatches[6 + i];
+      const busY2 = M.y + M.h + 6 + i * 3;
+      ctx.strokeStyle = 'rgba(224, 235, 224, 0.18)';
+      ctx.beginPath();
+      ctx.moveTo(mx, M.y + M.h - 3);
+      ctx.lineTo(mx, busY2);
+      ctx.lineTo(rs.x - 12 - i * 3, busY2);
+      ctx.lineTo(rs.x - 12 - i * 3, rs.y + rs.h / 2);
+      ctx.lineTo(rs.x, rs.y + rs.h / 2);
+      ctx.stroke();
+    });
+    swatches.forEach((r, i) => {
+      const side = i >= 6 ? 1 : 0;
+      const x = PROBES[i % 6];
+      const val = side ? yTotal(x, t, p) / 2 : y1(x, t, p);
+      const level = Math.round(Math.max(0, Math.min(1, (val + 1) / 2)) * 16);
+      ctx.drawImage(swatchTile(side ? C.text : C.lime, level, r.w, s.dpr), r.x, r.y, r.w, r.h);
+      ctx.font = `10px ${MONO}`;
+      ctx.fillStyle = C.dim;
+      ctx.fillText(String((i % 6) + 1), side ? r.x - 10 : r.x + r.w + 3, r.y + 9);
+    });
+    ctx.font = `11px ${MONO}`;
+    ctx.fillStyle = C.dim;
+    const r0 = swatches[0], r6 = swatches[6];
+    ctx.fillText('y₁ probes', r0.x, r0.y - 10);
+    const lbl = 'y probes';
+    ctx.fillText(lbl, r6.x + r6.w - ctx.measureText(lbl).width, r6.y - 10);
+  }
+
+  // Expression: brows lift and tilt up at the inner ends as the waves reinforce.
+  // Each brow is a recessed slot (dark) holding a lit bar, so it reads against the shell.
+  const lift = s.brow * 0.026 * g.S;
+  const tilt = Math.max(0, s.brow) * 0.04 * g.S; // reinforcing: inner ends rise; cancelling: flat and calm
+  const thick = Math.max(5, 0.045 * g.S);
+  for (const side of [-1, 1]) {
+    const eye = side < 0 ? L : R;
+    const x0 = eye.x + eye.w * 0.1;
+    const x1 = eye.x + eye.w * 0.9;
+    const baseY = eye.y - 0.07 * g.S - lift;
+    // y at a given x: inner end (toward the nose) is raised by `tilt`.
+    const yAt = (x: number) => {
+      const inner = side < 0 ? (x - x0) / (x1 - x0) : (x1 - x) / (x1 - x0);
+      return baseY - inner * tilt;
+    };
+    ctx.fillStyle = 'rgba(4, 7, 6, 0.85)';
+    ctx.beginPath();
+    ctx.moveTo(x0 - 3, yAt(x0) - 3);
+    ctx.lineTo(x1 + 3, yAt(x1) - 3);
+    ctx.lineTo(x1 + 3, yAt(x1) + thick + 3);
+    ctx.lineTo(x0 - 3, yAt(x0) + thick + 3);
+    ctx.closePath();
+    ctx.fill();
+    for (let x = x0; x <= x1; x += 3) {
+      const y = yAt(x);
+      const edge = Math.min(x - x0, x1 - x) / ((x1 - x0) / 2); // taper at the ends
+      for (let k = 0; k * 3 < thick; k++) {
+        const size = Math.max(0.8, (2.7 - k * 0.35) * (0.45 + 0.55 * Math.min(1, edge * 3)));
+        ctx.fillStyle = k === 0 ? HIGHLIGHT : C.lime;
+        ctx.fillRect(x - size / 2, y + k * 3 + 1.5 - size / 2, size, size);
+      }
+    }
+  }
+
+  // Ear lights pulse with the sum: brightness follows A_R and oscillates at f.
+  const level = (AR / 2) * (0.6 + 0.4 * Math.sin(2 * Math.PI * p.f * t));
+  // Ears sit near the silhouette, so they follow the head turn about half as far as the eyes.
+  const turnX = (L.x - (g.cx + (-EYE.x - EYE.hw) * g.S)) * 0.5;
+  const turnY = (L.y - (g.cy + (EYE.v - EYE.hh) * g.S)) * 0.5;
+  for (const side of [-1, 1]) {
+    const ex = g.cx + side * 0.765 * g.S + turnX;
+    const ey = g.cy + EYE.v * g.S + turnY;
+    for (let k = -2; k <= 2; k++) {
+      ctx.fillStyle = level > 0.02 ? C.lime : 'rgba(195,248,107,0.18)';
+      ctx.globalAlpha = Math.max(0.15, Math.min(1, level * (1 - Math.abs(k) * 0.12)));
+      if (effects && level > 0.05) {
+        ctx.shadowColor = C.lime;
+        ctx.shadowBlur = 10 * level;
+      }
+      ctx.fillRect(ex - 2, ey + k * 0.025 * g.S - 2, 4, 4);
+    }
+  }
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
 
   // Eyes: the two source waves over the same 2 m window.
-  const left = drawScreen(ctx, L, g, (x) => y1(x, t, p), C.lime, particles, effects);
-  const right = drawScreen(ctx, R, g, (x) => y2(x, t, p), C.ice, particles, effects);
+  const left = drawScreen(ctx, L, g, (x) => y1(x, t, p), C.lime, particles, effects, s.pulse);
+  const right = drawScreen(ctx, R, g, (x) => y2(x, t, p), C.ice, particles, effects, s.pulse);
+  const mouth = drawScreen(ctx, M, g, (x) => yTotal(x, t, p), C.text, particles, effects, 0);
+
+  // Probe ticks and readings inside the screens.
+  if (swatches.length) {
+    PROBES.forEach((x) => {
+      ctx.fillStyle = C.lime;
+      ctx.fillRect(left.X(x) - 0.5, L.y + L.h - 5, 1, 5);
+      ctx.beginPath();
+      ctx.arc(left.X(x), left.mid - y1(x, t, p) * g.unit, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = C.text;
+      ctx.fillRect(mouth.X(x) - 0.5, M.y + M.h - 5, 1, 5);
+      ctx.beginPath();
+      ctx.arc(mouth.X(x), mouth.mid - yTotal(x, t, p) * g.unit, 2, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
 
   // Matching crests: wave 1's crest in [1, 2) m, wave 2's lies φ/360·λ before it.
   let x1c = (Math.PI / 2 + 2 * Math.PI * p.f * t) / WAVE_NUMBER;
   x1c = ((((x1c - 1) % WAVELENGTH_M) + WAVELENGTH_M) % WAVELENGTH_M) + 1;
   const off = phaseOffsetMeters(p.phi);
   const x2c = x1c - off;
-  const strong = focus === 'phi';
   ctx.save();
   if (p.A1 > 0) {
     ctx.fillStyle = C.lime;
@@ -610,7 +727,7 @@ function paintLive(ctx: CanvasRenderingContext2D, g: Geometry, p: WaveParams, t:
   if (p.A2 > 0) {
     ctx.fillStyle = C.ice;
     ctx.beginPath();
-    ctx.arc(right.X(x2c), right.mid - p.A2 * g.unit, 3.2, 0, Math.PI * 2);
+    ctx.arc(right.X(x2c), right.mid - p.A2 * g.unit, strong ? 4.2 : 3.2, 0, Math.PI * 2);
     ctx.fill();
   }
   const by = R.y + 9;
@@ -626,11 +743,22 @@ function paintLive(ctx: CanvasRenderingContext2D, g: Geometry, p: WaveParams, t:
   ctx.lineTo(right.X(x1c), by);
   ctx.lineTo(right.X(x1c), by + 5);
   ctx.stroke();
+  ctx.shadowBlur = 0;
+  if (s.hoverEye || s.dragging) {
+    // Grab affordance: the wave in this eye can be dragged sideways.
+    ctx.fillStyle = 'rgba(234, 203, 141, 0.12)';
+    ctx.fillRect(R.x, R.y, R.w, R.h);
+    ctx.font = `11px ${MONO}`;
+    const hint = '⟷ drag to shift φ';
+    ctx.fillStyle = 'rgba(3, 6, 5, 0.85)';
+    const hw = ctx.measureText(hint).width;
+    ctx.fillRect(R.x + R.w / 2 - hw / 2 - 5, R.y + R.h / 2 - 9, hw + 10, 16);
+    ctx.fillStyle = C.amber;
+    ctx.fillText(hint, R.x + R.w / 2 - hw / 2, R.y + R.h / 2 + 3);
+  }
   ctx.restore();
 
-  // Mouth: the sum, with ghost sources and the ±A_R envelope.
-  const M = g.mouth;
-  const mouth = drawScreen(ctx, M, g, (x) => yTotal(x, t, p), C.text, particles, effects);
+  // Mouth: ghost sources and the ±A_R envelope.
   ctx.save();
   roundRectPath(ctx, M, Math.max(4, EYE.r * g.S));
   ctx.clip();
@@ -639,16 +767,16 @@ function paintLive(ctx: CanvasRenderingContext2D, g: Geometry, p: WaveParams, t:
   for (const [fn, col] of [[(x: number) => y1(x, t, p), 'rgba(195,248,107,0.4)'], [(x: number) => y2(x, t, p), 'rgba(185,225,207,0.4)']] as const) {
     ctx.strokeStyle = col;
     ctx.beginPath();
-    for (let px = 0; px <= M.w - 12; px += 2) {
+    for (let px = 0; px <= M.w - 2 * g.pad; px += 2) {
       const y = mouth.mid - fn(px / g.pxPerM) * g.unit;
-      px === 0 ? ctx.moveTo(M.x + 6 + px, y) : ctx.lineTo(M.x + 6 + px, y);
+      px === 0 ? ctx.moveTo(M.x + g.pad + px, y) : ctx.lineTo(M.x + g.pad + px, y);
     }
     ctx.stroke();
   }
   ctx.setLineDash([6, 4]);
   ctx.strokeStyle = 'rgba(224,235,224,0.45)';
-  for (const s of [-1, 1]) {
-    const y = Math.round(mouth.mid - s * AR * g.unit) + 0.5;
+  for (const sgn of [-1, 1]) {
+    const y = Math.round(mouth.mid - sgn * AR * g.unit) + 0.5;
     ctx.beginPath();
     ctx.moveTo(M.x, y);
     ctx.lineTo(M.x + M.w, y);
@@ -666,15 +794,28 @@ function paintLive(ctx: CanvasRenderingContext2D, g: Geometry, p: WaveParams, t:
     ctx.fillStyle = color;
     fillMath(ctx, text, lx, y);
   };
-  tab(compact ? '● y₁' : '● y₁ wave 1', L.x + 8, L.y + L.h - 7, C.lime);
-  tab(`A₁ ${fixed(p.A1)}`, L.x + L.w - 8, L.y + L.h - 7, C.dim, 'right');
-  tab(compact ? '■ y₂' : '■ y₂ wave 2', R.x + 8, R.y + R.h - 7, C.ice);
-  tab(`A₂ ${fixed(p.A2)}`, R.x + R.w - 8, R.y + R.h - 7, C.dim, 'right');
+  tab('● y₁', L.x + 8, L.y + L.h - 8, C.lime);
+  tab(`A₁ ${fixed(p.A1)}`, L.x + L.w - 8, L.y + L.h - 8, C.dim, 'right');
+  tab('■ y₂', R.x + 8, R.y + R.h - 8, C.ice);
+  tab(`A₂ ${fixed(p.A2)}`, R.x + R.w - 8, R.y + R.h - 8, C.dim, 'right');
   tab('◎ y = y₁ + y₂', M.x + 8, M.y + 16, C.text);
-  tab(AR < 1e-6 ? 'A_R 0 · cancelled' : `A_R ${fixed(AR)}`, M.x + M.w - 8, M.y + 16, AR < 1e-6 ? C.lime : C.dim, 'right');
+  tab(`A_R ${fixed(AR)}`, M.x + M.w - 8, M.y + 16, C.dim, 'right');
+
+  // The result, stamped on the mouth's lower bezel in the pixel face.
+  const kind = classify(p);
+  const stamp = STATE_TEXT[kind];
+  ctx.font = `${compact ? 17 : 20}px ${PIXEL}`;
+  const sw = ctx.measureText(stamp).width;
+  const sy = M.y + M.h;
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(M.x + M.w / 2 - sw / 2 - 8, sy - 9, sw + 16, 18);
+  ctx.strokeStyle = 'rgba(224, 235, 224, 0.6)';
+  ctx.strokeRect(Math.round(M.x + M.w / 2 - sw / 2 - 8) + 0.5, Math.round(sy - 9) + 0.5, Math.round(sw + 16), 18);
+  ctx.fillStyle = kind === 'constructive' ? HIGHLIGHT : kind === 'cancellation' ? C.ice : C.text;
+  ctx.fillText(stamp, M.x + M.w / 2 - sw / 2, sy + 5);
 
   // Phase bar across the bridge between the eyes and the mouth.
-  const bridgeY = (L.y + L.h + M.y) / 2 + 4;
+  const bridgeY = (L.y + L.h + M.y) / 2 + 2;
   const phText = `◆ φ = ${fixed(p.phi, 0)}° · Δx ${fixed(off)} m`;
   ctx.font = `${strong ? 14 : 13}px ${MONO}`;
   const pw = ctx.measureText(phText).width;
@@ -686,44 +827,372 @@ function paintLive(ctx: CanvasRenderingContext2D, g: Geometry, p: WaveParams, t:
   ctx.fillStyle = C.amber;
   ctx.fillText(phText, g.cx - pw / 2, bridgeY + 1);
 
-  if (headOnly) return;
-  // Serial header reads the live parameters, dossier-style.
-  ctx.fillStyle = C.lime;
-  ctx.font = `${compact ? 18 : 22}px ${PIXEL}`;
-  ctx.fillText('SERIAL:', 24, 34);
-  ctx.fillText(`/λ${fixed(WAVELENGTH_M)} /f${fixed(p.f)} /φ${fixed(p.phi, 0)}`, 24, compact ? 52 : 56);
-  if (!compact) {
-    const unitText = 'OBSERVER OU-01';
-    ctx.fillText(unitText, g.W - 24 - ctx.measureText(unitText).width, 34);
-    ctx.font = `12px ${MONO}`;
-    ctx.fillStyle = C.dim;
-    const t2 = `t = ${fixed(t, 2)} s`;
-    ctx.fillText(t2, g.W - 24 - ctx.measureText(t2).width, 54);
-  }
+  if (s.headOnly || compact) return;
 
-  // Probe swatches: dither density = displacement at fixed points (left y₁, right y).
-  if (g.swatches) {
-    const rects = swatchRects(g);
-    rects.forEach((r, i) => {
-      const side = i >= 6 ? 1 : 0;
-      const x = 0.25 + (i % 6) * 0.5;
-      const val = side ? yTotal(x, t, p) / 3.0 : y1(x, t, p) / 1.5;
-      const density = Math.max(0, Math.min(1, (val + 1) / 2));
-      ctx.fillStyle = side ? C.text : C.lime;
-      const cells = Math.floor(r.w / 3);
-      for (let cy = 0; cy < cells; cy++) for (let cx = 0; cx < cells; cx++) {
-        if ((BAYER[(cy % 4) * 4 + (cx % 4)] + 0.5) / 16 < density) {
-          ctx.globalAlpha = 0.75;
-          ctx.fillRect(r.x + 1 + cx * 3, r.y + 1 + cy * 3, 2, 2);
-        }
-      }
-      ctx.globalAlpha = 1;
-    });
+  // Leader-line annotations, contour-poster style: anchor dot, elbow, framed panel.
+  const panel = (title: string, sub: string, color: string, px: number, py: number, ax: number, ay: number, alignRight = false) => {
+    ctx.font = `17px ${PIXEL}`;
+    const tw = ctx.measureText(title).width;
+    ctx.font = `11px ${MONO}`;
+    const subW = fillMath(ctx, sub, 0, 0, true);
+    const w = Math.max(tw, subW) + 16;
+    const h = 36;
+    const x = alignRight ? px - w : px;
+    const elbowX = alignRight ? x : x + w;
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.6;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(elbowX, py + h / 2);
+    ctx.lineTo(elbowX + (alignRight ? -14 : 14), py + h / 2);
+    ctx.lineTo(ax, ay);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(ax, ay, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(8, 13, 11, 0.9)';
+    ctx.fillRect(x, py, w, h);
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.55;
+    ctx.strokeRect(Math.round(x) + 0.5, Math.round(py) + 0.5, Math.round(w), h);
+    ctx.globalAlpha = 1;
+    // Registration ticks on the corners.
+    ctx.fillStyle = color;
+    for (const [cx, cy] of [[x, py], [x + w, py], [x, py + h], [x + w, py + h]]) {
+      ctx.fillRect(cx - 3, cy - 0.5, 6, 1);
+      ctx.fillRect(cx - 0.5, cy - 3, 1, 6);
+    }
+    ctx.font = `17px ${PIXEL}`;
+    ctx.fillText(title, x + 8, py + 15);
     ctx.font = `11px ${MONO}`;
     ctx.fillStyle = C.dim;
-    const r5 = rects[5], r11 = rects[11];
-    ctx.fillText('y₁ probe', r5.x, r5.y + r5.h + 18);
-    const lbl = 'y probe';
-    ctx.fillText(lbl, r11.x + r11.w - ctx.measureText(lbl).width, r11.y + r11.h + 18);
+    fillMath(ctx, sub, x + 8, py + 29);
+  };
+  const lx0 = g.swatches ? 80 : 16;
+  const rx0 = g.W - (g.swatches ? 80 : 16);
+  panel('LEFT EYE', 'y₁ · wave 1', C.lime, lx0, 22, L.x + 10, L.y + 4);
+  panel('RIGHT EYE', 'y₂ · drag to shift φ', C.ice, rx0, 22, R.x + R.w - 10, R.y + 4, true);
+  panel('MOUTH', 'y = y₁ + y₂', C.text, lx0, g.H - 66, M.x + 4, M.y + M.h * 0.7);
+}
+
+export function ObserverHead({ params: p, clock, focus, effects, reducedMotion, onPhase, sliderRef }: Props) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const layerRef = useRef<HTMLCanvasElement | null>(null);
+  const bloomRef = useRef<HTMLCanvasElement | null>(null);
+  const fieldRef = useRef<{ field: Field; W: number; H: number; dpr: number } | null>(null);
+  const built = useRef({ yaw: NaN, pitch: NaN, W: 0, H: 0 });
+  const bloomState = useRef({ ready: false, since: 0 });
+  const moving = useRef(false);
+  const look = useRef({ yaw: 0, pitch: 0, ty: 0, tp: 0 });
+  const anim = useRef({ start: 0, pulseAt: -1e9, lastInput: 0, lastDraw: 0, brow: 0, phi: p.phi });
+  const drag = useRef<{ x: number; phi: number } | null>(null);
+  const [hoverEye, setHoverEye] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  const [hidden, setHidden] = useState(false);
+  const arriving = useRef<FlightRect | null>(null);
+
+  const particles = useMemo<Particle[]>(() => {
+    const rnd = seeded(11);
+    return Array.from({ length: 150 }, (_, i) => ({ x: ((i + rnd()) / 150) * 3, o: rnd() * 2 - 1 }));
+  }, []);
+
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setSize({ w: Math.round(e.contentRect.width), h: Math.round(e.contentRect.height) }));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // A phase change pulses the eye bezels and sends a pulse up the circuit trace.
+  if (p.phi !== anim.current.phi) {
+    anim.current.phi = p.phi;
+    if (!reducedMotion) anim.current.pulseAt = performance.now();
+    anim.current.lastInput = performance.now();
   }
+
+  const thumbX = () => {
+    const input = sliderRef?.current;
+    const canvas = canvasRef.current;
+    if (!input || !canvas) return null;
+    const r = input.getBoundingClientRect();
+    const c = canvas.getBoundingClientRect();
+    if (!r.width) return null;
+    const thumb = 18;
+    return r.left - c.left + thumb / 2 + (p.phi / 360) * (r.width - thumb);
+  };
+
+  const draw = (force: boolean) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !size.w) return;
+    const now = performance.now();
+    const a = anim.current;
+    if (!a.start) a.start = now;
+    const entering = !reducedMotion && now - a.start < ENTRANCE_MS;
+    const pulseAge = now - a.pulseAt;
+    const busy = entering || pulseAge < 600 || now - a.lastInput < 800 || moving.current || drag.current !== null;
+    // Nobody interacting: 30 fps is plenty for slow waves and keeps the main thread free.
+    if (!force && !busy && now - a.lastDraw < IDLE_FRAME_MS) return;
+    a.lastDraw = now;
+
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    if (canvas.width !== size.w * dpr || canvas.height !== size.h * dpr) {
+      canvas.width = size.w * dpr;
+      canvas.height = size.h * dpr;
+    }
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const { yaw, pitch } = look.current;
+    const g = geometry(size.w, size.h, yaw, pitch);
+    if (!layerRef.current) layerRef.current = document.createElement('canvas');
+    if (!bloomRef.current) bloomRef.current = document.createElement('canvas');
+    const fc = fieldRef.current;
+    if (!fc || fc.W !== size.w || fc.H !== size.h || fc.dpr !== dpr) {
+      fieldRef.current = { field: buildField(geometry(size.w, size.h, 0, 0), dpr), W: size.w, H: size.h, dpr };
+      built.current.W = 0;
+    }
+    const b = built.current;
+    if (b.W !== size.w || b.H !== size.h || Math.abs(b.yaw - yaw) > 0.004 || Math.abs(b.pitch - pitch) > 0.004) {
+      buildLayer(layerRef.current, g, fieldRef.current!.field, dpr, yaw, pitch);
+      built.current = { yaw, pitch, W: size.w, H: size.h };
+      bloomState.current.ready = false;
+    }
+    // Bloom only at rest, faded in rather than popped.
+    const bs = bloomState.current;
+    if (effects && !moving.current && !bs.ready) {
+      buildBloom(bloomRef.current, layerRef.current, dpr);
+      bs.ready = true;
+      bs.since = now;
+    }
+
+    // Expression eases toward the physics: reinforcing waves lift the brows.
+    const AR = resultantAmplitude(p);
+    const target = p.A1 + p.A2 > 0 ? (AR / (p.A1 + p.A2)) * 2 - 1 : 0;
+    a.brow = reducedMotion ? target : a.brow + (target - a.brow) * 0.15;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    if (entering) {
+      // CRT warm-up: the picture is revealed top to bottom behind a bright scan line.
+      const k = (now - a.start) / ENTRANCE_MS;
+      ctx.beginPath();
+      ctx.rect(0, 0, canvas.width, canvas.height * k);
+      ctx.clip();
+    }
+    ctx.drawImage(layerRef.current, 0, 0);
+    if (effects && bs.ready) {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.38 * Math.min(1, (now - bs.since) / GLOW_FADE_MS);
+      ctx.drawImage(bloomRef.current, 0, 0);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    paintLive(ctx, g, p, particles, {
+      t: clock.t,
+      now,
+      focus,
+      effects,
+      pulse: reducedMotion ? 0 : Math.max(0, 1 - pulseAge / PULSE_MS),
+      pulseTravel: reducedMotion || pulseAge > 450 ? -1 : pulseAge / 450,
+      brow: a.brow,
+      thumbX: thumbX(),
+      hoverEye,
+      dragging,
+      headOnly: false,
+      dpr,
+    });
+    ctx.restore();
+    if (entering) {
+      const y = size.h * ((now - a.start) / ENTRANCE_MS);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = HIGHLIGHT;
+      ctx.globalAlpha = 0.85;
+      if (effects) {
+        ctx.shadowColor = C.lime;
+        ctx.shadowBlur = 16;
+      }
+      ctx.fillRect(0, y - 1, size.w, 2);
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+    }
+  };
+
+  const drawRef = useRef(draw);
+  drawRef.current = draw;
+  useEffect(() => clock.subscribe(() => drawRef.current(false)), [clock]);
+  useEffect(() => drawRef.current(true), [size, p.A1, p.A2, p.f, p.phi, focus, effects, hoverEye, dragging]);
+
+  // Animations that must run even while playback is paused: entrance, pulses, expression.
+  useEffect(() => {
+    if (reducedMotion) return;
+    let raf = 0;
+    const tick = () => {
+      const a = anim.current;
+      const now = performance.now();
+      const active = now - a.start < ENTRANCE_MS || now - a.pulseAt < 600 || now - a.lastInput < 800 || now - bloomState.current.since < GLOW_FADE_MS;
+      if (active) drawRef.current(true);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [reducedMotion]);
+
+  // The head turns toward the pointer, then settles. Off under reduced motion.
+  useEffect(() => {
+    if (reducedMotion) {
+      look.current = { yaw: 0, pitch: 0, ty: 0, tp: 0 };
+      drawRef.current(true);
+      return;
+    }
+    let raf = 0;
+    const tick = () => {
+      const l = look.current;
+      l.yaw += (l.ty - l.yaw) * 0.12;
+      l.pitch += (l.tp - l.pitch) * 0.12;
+      const settling = Math.abs(l.ty - l.yaw) + Math.abs(l.tp - l.pitch) > 0.002;
+      moving.current = settling;
+      drawRef.current(true);
+      raf = settling ? requestAnimationFrame(tick) : 0;
+    };
+    const move = (e: PointerEvent) => {
+      const el = wrapRef.current;
+      if (!el || e.pointerType === 'touch' || drag.current) return;
+      const r = el.getBoundingClientRect();
+      const clamp = (n: number) => Math.max(-1, Math.min(1, n));
+      look.current.ty = clamp((e.clientX - (r.left + r.width / 2)) / (r.width * 0.9));
+      look.current.tp = clamp((e.clientY - (r.top + r.height * 0.42)) / (r.height * 0.9));
+      if (!raf) raf = requestAnimationFrame(tick);
+    };
+    const leave = () => {
+      look.current.ty = 0;
+      look.current.tp = 0;
+      if (!raf) raf = requestAnimationFrame(tick);
+    };
+    window.addEventListener('pointermove', move, { passive: true });
+    document.documentElement.addEventListener('pointerleave', leave);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('pointermove', move);
+      document.documentElement.removeEventListener('pointerleave', leave);
+    };
+  }, [reducedMotion]);
+
+  // Direct manipulation: drag the wave in the right eye to shift its phase.
+  const inRightEye = (e: React.PointerEvent) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !size.w) return false;
+    const c = canvas.getBoundingClientRect();
+    const { yaw, pitch } = look.current;
+    const R = geometry(size.w, size.h, yaw, pitch).eyes[1];
+    const x = e.clientX - c.left, y = e.clientY - c.top;
+    return x >= R.x && x <= R.x + R.w && y >= R.y && y <= R.y + R.h;
+  };
+  const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!onPhase || !inRightEye(e)) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { x: e.clientX, phi: p.phi };
+    setDragging(true);
+  };
+  const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (drag.current && onPhase) {
+      const g = geometry(size.w, size.h, 0, 0);
+      // Moving the wave right moves its crest right, which reduces how far it trails wave 1.
+      const dPhi = -((e.clientX - drag.current.x) / g.pxPerM / WAVELENGTH_M) * 360;
+      const raw = (((drag.current.phi + dPhi) % 360) + 360) % 360;
+      onPhase(Math.round(raw / 5) * 5);
+      anim.current.lastInput = performance.now();
+      return;
+    }
+    const over = !!onPhase && inRightEye(e);
+    if (over !== hoverEye) setHoverEye(over);
+  };
+  const endDrag = () => {
+    drag.current = null;
+    setDragging(false);
+  };
+
+  // The docked miniature keeps showing whatever phase the learner left here.
+  useEffect(() => {
+    Object.assign(observerParams, p);
+  }, [p]);
+
+  /** Head only (no tunnel, probes or panels), cropped to HEAD_BOX, in viewport coordinates. */
+  const snapshot = (): { image: HTMLCanvasElement; rect: FlightRect } | null => {
+    const el = wrapRef.current;
+    const fc = fieldRef.current;
+    if (!el || !fc) return null;
+    const { yaw, pitch } = look.current;
+    const g = geometry(fc.W, fc.H, yaw, pitch);
+    const layer = document.createElement('canvas');
+    buildLayer(layer, g, fc.field, fc.dpr, yaw, pitch, false);
+    const lctx = layer.getContext('2d')!;
+    lctx.setTransform(fc.dpr, 0, 0, fc.dpr, 0, 0);
+    paintLive(lctx, g, p, particles, {
+      t: clock.t, now: performance.now(), focus: null, effects, pulse: 0, pulseTravel: -1,
+      brow: anim.current.brow, thumbX: null, hoverEye: false, dragging: false, headOnly: true, dpr: fc.dpr,
+    });
+    const box = headBox(geometry(fc.W, fc.H, 0, 0));
+    const out = document.createElement('canvas');
+    out.width = Math.round(box.w * fc.dpr);
+    out.height = Math.round(box.h * fc.dpr);
+    out.getContext('2d')!.drawImage(layer, box.x * fc.dpr, box.y * fc.dpr, box.w * fc.dpr, box.h * fc.dpr, 0, 0, out.width, out.height);
+    const r = el.getBoundingClientRect();
+    return { image: out, rect: { x: r.left + box.x, y: r.top + box.y, w: box.w, h: box.h } };
+  };
+  const snapshotRef = useRef(snapshot);
+  snapshotRef.current = snapshot;
+  const reducedMotionRef = useRef(reducedMotion);
+  reducedMotionRef.current = reducedMotion;
+
+  // Leaving the entry screen: hand the head to the top bar. Returning: wait for it to land.
+  useLayoutEffect(() => {
+    if (!reducedMotion) {
+      const back = claimFlight('undock');
+      if (back) {
+        arriving.current = back.from;
+        anim.current.start = -1e9; // the flight replaces the entrance
+        setHidden(true);
+      }
+    }
+    return () => {
+      if (reducedMotionRef.current) return;
+      const shot = snapshotRef.current();
+      if (shot) leaveFlight('dock', shot.rect, shot.image);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const from = arriving.current;
+    if (!from || !size.w || !fieldRef.current) return;
+    arriving.current = null;
+    const shot = snapshotRef.current();
+    if (!shot) return setHidden(false);
+    void fly(shot.image, from, shot.rect).then(() => setHidden(false));
+  }, [size]);
+
+  const AR = resultantAmplitude(p);
+  const label = `Live wave model drawn as a dot-matrix robot face. Left eye: wave 1, amplitude ${fixed(p.A1)}. Right eye: wave 2, amplitude ${fixed(p.A2)}, shifted by ${fixed(p.phi, 0)} degrees; drag it sideways to change the shift. Mouth: their sum, amplitude ${fixed(AR)}.`;
+  return (
+    <div className={`stage-canvas observer${hidden ? ' awaiting' : ''}`} ref={wrapRef}>
+      <canvas
+        ref={canvasRef}
+        role="img"
+        aria-label={label}
+        style={{ width: size.w, height: size.h, cursor: dragging ? 'grabbing' : hoverEye ? 'grab' : undefined }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onPointerLeave={() => !drag.current && setHoverEye(false)}
+      />
+    </div>
+  );
 }

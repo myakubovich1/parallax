@@ -1050,3 +1050,42 @@ input[type='range']:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(
   .experiment-equation { order: 2; }
   .experiment-feedback { order: 3; }
 }
+
+/* Observer preview: serial in the frame strip, dither preset tiles in place of the readout grid. */
+.preview-frame .serial { font-family: 'VT323', var(--font-mono); font-size: 17px; letter-spacing: 0.04em; color: var(--lime); }
+.preset-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 14px var(--s2) 16px; border-top: 1px solid rgba(198, 190, 255, 0.18); }
+.preset-tile {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  padding: 10px 8px 0;
+  background: #070b09;
+  border: 1px solid var(--control);
+  border-radius: 2px;
+  color: var(--text);
+  transition: border-color var(--t-fast), box-shadow var(--t-fast), background var(--t-fast);
+}
+.preset-tile:hover { border-color: var(--lime); }
+.preset-tile.on { border-color: var(--lime); background: linear-gradient(180deg, var(--lime-dim), transparent); }
+[data-effects='on'] .preset-tile.on { box-shadow: 0 0 18px -6px rgba(195, 248, 107, 0.55); }
+.preset-thumb { width: 100%; max-width: 112px; height: 48px; image-rendering: pixelated; }
+.preset-tile-label {
+  align-self: stretch;
+  margin: 0 -8px;
+  padding: 4px 6px;
+  border-top: 1px solid var(--control);
+  font-family: 'VT323', var(--font-mono);
+  font-size: 18px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: center;
+  white-space: nowrap;
+}
+.preset-tile.on .preset-tile-label { color: var(--lime); border-top-color: var(--lime); }
+.observer canvas { touch-action: pan-y; }
+@media (max-width: 719px) {
+  .preset-tiles { gap: 8px; padding: 12px; }
+  .preset-tile-label { display: flex; flex-direction: column; font-size: 15px; letter-spacing: 0.02em; line-height: 1.05; }
+  .preview-frame .serial { display: none; }
+}
