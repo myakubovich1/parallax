@@ -72,11 +72,6 @@ export const EntryScreen = forwardRef<HTMLTextAreaElement, Props>(function Entry
         <section className="entry-right" aria-label="Live preview: wave interference">
           <div className="preview-id instrument-label"><span>02 / In the field</span><span>Wave interference</span></div>
           <WavePreview onOpen={(params) => onOpenLesson('wave-interference', params)} />
-          <div className="preview-note">
-            <span className="dither-swatch" aria-hidden="true" />
-            <p><span className="instrument-label">Small change. Different picture.</span><br />Move the phase slider to see two waves become one.</p>
-            <span className="preview-note-arrow" aria-hidden="true"><Icon name="send" size={28} /></span>
-          </div>
         </section>
       </div>
       <footer className="entry-foot">

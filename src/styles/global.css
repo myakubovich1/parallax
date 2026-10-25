@@ -259,11 +259,6 @@ kbd { font-family: var(--font-mono); font-size: 12px; border: 1px solid var(--ru
 .entry-form .kbd-hint kbd { font-size: 10px; }
 .preview-id { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 14px; font-size: 10px; }
 .preview-id span:first-child { color: var(--violet); }
-.preview-note { display: flex; gap: 20px; align-items: center; padding: 20px 0; border-bottom: 1px dashed var(--rule); }
-.preview-note p { margin: 0; font-size: 13px; color: var(--text-2); line-height: 1.7; }
-.preview-note .instrument-label { font-size: 10px; color: var(--lime); }
-.preview-note-arrow { transform: rotate(-45deg); margin-left: auto; color: var(--lime); font-size: 30px; }
-.dither-swatch { flex: none; width: 48px; height: 48px; border: 1px solid var(--control); background-color: #101c10; background-image: radial-gradient(var(--lime) .8px, transparent 1px), linear-gradient(135deg, #c3f86b88, transparent); background-size: 3px 3px, 100% 100%; image-rendering: pixelated; }
 .textarea-wrap { position: relative; }
 .textarea-wrap textarea {
   display: block;
@@ -797,8 +792,6 @@ input[type='range']:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(
   .entry-form .mode-name::before { display: none; }
   .entry-form .mode-option { padding: 12px 5px; }
   .entry-grid { gap: 32px; }
-  .preview-note { gap: 12px; }
-  .preview-note p { font-size: 12px; }
   .entry-copy { font-size: 17px; margin-bottom: var(--s3); }
   .mode-options { grid-template-columns: 1fr; }
   .create-row .btn { width: 100%; }
