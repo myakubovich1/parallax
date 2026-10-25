@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject }
 import type { SimClock } from '../lib/clock';
 import { fixed } from '../lib/format';
 import { claimFlight, fly, leaveFlight, observerParams, type FlightRect } from '../lib/observerFlight';
+import { EGG_FAST, onRobotCue, revealEgg } from '../lib/eggs';
 import { WAVELENGTH_M, WAVE_NUMBER, classify, phaseOffsetMeters, resultantAmplitude, y1, y2, yTotal, type WaveParams } from '../lib/physics/wave';
 import { C, MONO, seeded } from './palette';
 import { fillMath } from './WaveRenderer';
@@ -26,6 +27,71 @@ const GLOW_FADE_MS = 200;
 const IDLE_FRAME_MS = 1000 / 30;
 
 const STATE_TEXT = { constructive: 'CONSTRUCTIVE', partial: 'PARTIAL', destructive: 'DESTRUCTIVE', cancellation: 'CANCELLED' } as const;
+
+/** Easter-egg timings (ms). All are one-off and skipped (caption only) under reduced motion. */
+const EGG_MS = { blink: 280, glance: 1300, ouch: 1600, flicker: 360, dizzy: 1400, shake: 700, resonance: 1800, pleaseStop: 1500, nod: 650, classic: 1700, exhale: 450, hush: 2600 };
+const STARE_MS = EGG_FAST ? 1500 : 8000;
+
+interface EggTimes {
+  blinkAt: number; glanceDir: number; ouchAt: number; dizzyAt: number; resonanceAt: number;
+  nodAt: number; classicAt: number; hushAt: number; exhaleAt: number;
+}
+const NEVER = -1e9;
+const freshEggTimes = (): EggTimes => ({ blinkAt: NEVER, glanceDir: 1, ouchAt: NEVER, dizzyAt: NEVER, resonanceAt: NEVER, nodAt: NEVER, classicAt: NEVER, hushAt: NEVER, exhaleAt: NEVER });
+
+/** What this frame should show, derived from when each egg last fired. */
+interface EggPaint {
+  blink: number; // 0..1 eyelid closure
+  dizzy: number; // seconds into the spiral, or −1
+  flicker: boolean;
+  stamp: string | null;
+  ear: 'amber' | 'flash' | null;
+  ripple: number; // 0..1, or −1
+  classic: boolean;
+  brow: number | null; // expression override
+  split: number; // 0..1 stereo separation (Shift)
+}
+function eggPaint(e: EggTimes, now: number, reduced: boolean, split: number): EggPaint {
+  const age = (t: number) => now - t;
+  const within = (t: number, ms: number) => age(t) >= 0 && age(t) < ms;
+  const resonanceEnd = EGG_MS.resonance;
+  return {
+    blink: !reduced && within(e.blinkAt, EGG_MS.blink) ? Math.sin((Math.PI * age(e.blinkAt)) / EGG_MS.blink) : 0,
+    dizzy: !reduced && within(e.dizzyAt, EGG_MS.dizzy) ? age(e.dizzyAt) / 1000 : -1,
+    flicker: !reduced && within(e.ouchAt, EGG_MS.flicker) && Math.floor(age(e.ouchAt) / 60) % 2 === 0,
+    stamp: within(e.classicAt, EGG_MS.classic) ? 'CLASSIC.'
+      : within(e.ouchAt, EGG_MS.ouch) ? 'OUCH'
+      : age(e.resonanceAt) >= resonanceEnd && within(e.resonanceAt, resonanceEnd + EGG_MS.pleaseStop) ? 'PLEASE STOP'
+      : within(e.hushAt, EGG_MS.hush) ? 'SHHH…'
+      : null,
+    ear: within(e.ouchAt, EGG_MS.ouch) ? 'amber' : within(e.exhaleAt, EGG_MS.exhale) ? 'flash' : null,
+    ripple: !reduced && within(e.resonanceAt, resonanceEnd) ? age(e.resonanceAt) / resonanceEnd : -1,
+    classic: within(e.classicAt, EGG_MS.classic),
+    brow: within(e.classicAt, EGG_MS.classic) ? 1.4 : within(e.exhaleAt, EGG_MS.exhale) ? 0.6 : null,
+    split,
+  };
+}
+/** Head motion requested by eggs: glance after a blink, dizzy shake, resonance wobble, nod. */
+function eggMotion(e: EggTimes, now: number): { yaw: number; pitch: number } {
+  let yaw = 0, pitch = 0;
+  const g = now - e.blinkAt - EGG_MS.blink;
+  if (g >= 0 && g < EGG_MS.glance) yaw += e.glanceDir * 0.75 * Math.sin((Math.PI * g) / EGG_MS.glance);
+  const sh = now - e.dizzyAt - EGG_MS.dizzy;
+  if (sh >= 0 && sh < EGG_MS.shake) yaw += 0.5 * Math.sin(sh / 18) * (1 - sh / EGG_MS.shake);
+  const r = now - e.resonanceAt;
+  if (r >= 0 && r < EGG_MS.resonance) {
+    const decay = 1 - r / EGG_MS.resonance;
+    yaw += 0.45 * Math.sin((2 * Math.PI * 2.2 * r) / 1000) * decay;
+    pitch += 0.18 * Math.sin((2 * Math.PI * 4.4 * r) / 1000) * decay;
+  }
+  const n = now - e.nodAt;
+  if (n >= 0 && n < EGG_MS.nod) pitch += 0.7 * Math.sin((Math.PI * n) / EGG_MS.nod);
+  return { yaw, pitch };
+}
+const eggBusy = (e: EggTimes, now: number) =>
+  now - e.blinkAt < EGG_MS.blink + EGG_MS.glance || now - e.ouchAt < EGG_MS.ouch || now - e.dizzyAt < EGG_MS.dizzy + EGG_MS.shake ||
+  now - e.resonanceAt < EGG_MS.resonance + EGG_MS.pleaseStop || now - e.nodAt < EGG_MS.nod || now - e.classicAt < EGG_MS.classic ||
+  now - e.exhaleAt < EGG_MS.exhale || now - e.hushAt < EGG_MS.hush;
 
 interface Props {
   params: WaveParams;
@@ -522,6 +588,7 @@ interface LiveState {
   dragging: boolean;
   headOnly: boolean;
   dpr: number;
+  egg: EggPaint | null;
 }
 
 function paintLive(ctx: CanvasRenderingContext2D, g: Geometry, p: WaveParams, particles: Particle[], s: LiveState) {
@@ -626,6 +693,20 @@ function paintLive(ctx: CanvasRenderingContext2D, g: Geometry, p: WaveParams, pa
     ctx.fillText(lbl, r6.x + r6.w - ctx.measureText(lbl).width, r6.y - 10);
   }
 
+  // Resonance egg: rings ripple outward through the tunnel.
+  if (s.egg && s.egg.ripple >= 0) {
+    ctx.setLineDash([7, 6]);
+    for (let i = 0; i < 3; i++) {
+      const k = s.egg.ripple * 1.4 - i * 0.2;
+      if (k <= 0 || k >= 1) continue;
+      const w = (1.6 + k * 1.4) * g.S, h = (1.9 + k * 1.4) * g.S;
+      ctx.strokeStyle = `rgba(195, 248, 107, ${(1 - k) * 0.7})`;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(g.cx - w / 2, g.cy - 0.1 * g.S - h / 2, w, h);
+    }
+    ctx.setLineDash([]);
+  }
+
   // Expression: brows lift and tilt up at the inner ends as the waves reinforce.
   // Each brow is a recessed slot (dark) holding a lit bar, so it reads against the shell.
   const lift = s.brow * 0.026 * g.S;
@@ -661,7 +742,8 @@ function paintLive(ctx: CanvasRenderingContext2D, g: Geometry, p: WaveParams, pa
   }
 
   // Ear lights pulse with the sum: brightness follows A_R and oscillates at f.
-  const level = (AR / 2) * (0.6 + 0.4 * Math.sin(2 * Math.PI * p.f * t));
+  const earEgg = s.egg?.ear ?? null;
+  const level = earEgg ? 1 : (AR / 2) * (0.6 + 0.4 * Math.sin(2 * Math.PI * p.f * t));
   // Ears sit near the silhouette, so they follow the head turn about half as far as the eyes.
   const turnX = (L.x - (g.cx + (-EYE.x - EYE.hw) * g.S)) * 0.5;
   const turnY = (L.y - (g.cy + (EYE.v - EYE.hh) * g.S)) * 0.5;
@@ -669,7 +751,7 @@ function paintLive(ctx: CanvasRenderingContext2D, g: Geometry, p: WaveParams, pa
     const ex = g.cx + side * 0.765 * g.S + turnX;
     const ey = g.cy + EYE.v * g.S + turnY;
     for (let k = -2; k <= 2; k++) {
-      ctx.fillStyle = level > 0.02 ? C.lime : 'rgba(195,248,107,0.18)';
+      ctx.fillStyle = earEgg === 'amber' ? C.amber : earEgg === 'flash' ? HIGHLIGHT : level > 0.02 ? C.lime : 'rgba(195,248,107,0.18)';
       ctx.globalAlpha = Math.max(0.15, Math.min(1, level * (1 - Math.abs(k) * 0.12)));
       if (effects && level > 0.05) {
         ctx.shadowColor = C.lime;
@@ -758,6 +840,69 @@ function paintLive(ctx: CanvasRenderingContext2D, g: Geometry, p: WaveParams, pa
   }
   ctx.restore();
 
+  // Easter-egg overlays on the eye screens: spirals (dizzy), E = mc² (classic), eyelids (blink).
+  if (s.egg) {
+    const rad = Math.max(4, EYE.r * g.S);
+    for (const [eye, color, i] of [[L, C.lime, 0], [R, C.ice, 1]] as const) {
+      if (s.egg.dizzy < 0 && !s.egg.classic && s.egg.blink <= 0) break;
+      ctx.save();
+      roundRectPath(ctx, eye, rad);
+      ctx.clip();
+      if (s.egg.dizzy >= 0 || s.egg.classic) {
+        ctx.fillStyle = '#030605';
+        ctx.fillRect(eye.x, eye.y, eye.w, eye.h);
+      }
+      if (s.egg.dizzy >= 0) {
+        const cx = eye.x + eye.w / 2, cy = eye.y + eye.h / 2, R0 = Math.min(eye.w, eye.h) * 0.46;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let th = 0; th < 6 * Math.PI; th += 0.15) {
+          const r = (th / (6 * Math.PI)) * R0;
+          const a = th + s.egg.dizzy * (i ? -7 : 7);
+          const x = cx + r * Math.cos(a), y = cy + r * Math.sin(a);
+          th ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        }
+        ctx.stroke();
+      }
+      if (s.egg.classic) {
+        // The pixel face has no superscript digits, so the exponent is set by hand.
+        const size = Math.round(eye.h * (i ? 0.36 : 0.48));
+        const base = i ? 'c² ≈ 9×10' : 'E = mc²';
+        const exp = i ? '16' : '';
+        ctx.font = `${size}px ${PIXEL}`;
+        const bw = ctx.measureText(base).width;
+        ctx.font = `${Math.round(size * 0.6)}px ${PIXEL}`;
+        const ew = exp ? ctx.measureText(exp).width : 0;
+        const x0 = eye.x + eye.w / 2 - (bw + ew) / 2;
+        const y0 = eye.y + eye.h / 2 + eye.h * 0.14;
+        ctx.fillStyle = color;
+        if (effects) {
+          ctx.shadowColor = color;
+          ctx.shadowBlur = 10;
+        }
+        ctx.font = `${size}px ${PIXEL}`;
+        ctx.fillText(base, x0, y0);
+        if (exp) {
+          ctx.font = `${Math.round(size * 0.6)}px ${PIXEL}`;
+          ctx.fillText(exp, x0 + bw + 1, y0 - size * 0.42);
+        }
+        ctx.shadowBlur = 0;
+      }
+      if (s.egg.blink > 0) {
+        // Upper and lower lids meet in the middle.
+        const lid = (eye.h / 2) * s.egg.blink;
+        ctx.fillStyle = C.bg;
+        ctx.fillRect(eye.x, eye.y, eye.w, lid);
+        ctx.fillRect(eye.x, eye.y + eye.h - lid, eye.w, lid);
+        ctx.fillStyle = color;
+        ctx.fillRect(eye.x, eye.y + lid - 1, eye.w, 1.5);
+        ctx.fillRect(eye.x, eye.y + eye.h - lid - 0.5, eye.w, 1.5);
+      }
+      ctx.restore();
+    }
+  }
+
   // Mouth: ghost sources and the ±A_R envelope.
   ctx.save();
   roundRectPath(ctx, M, Math.max(4, EYE.r * g.S));
@@ -803,7 +948,7 @@ function paintLive(ctx: CanvasRenderingContext2D, g: Geometry, p: WaveParams, pa
 
   // The result, stamped on the mouth's lower bezel in the pixel face.
   const kind = classify(p);
-  const stamp = STATE_TEXT[kind];
+  const stamp = s.egg?.stamp ?? STATE_TEXT[kind];
   ctx.font = `${compact ? 17 : 20}px ${PIXEL}`;
   const sw = ctx.measureText(stamp).width;
   const sy = M.y + M.h;
@@ -811,7 +956,7 @@ function paintLive(ctx: CanvasRenderingContext2D, g: Geometry, p: WaveParams, pa
   ctx.fillRect(M.x + M.w / 2 - sw / 2 - 8, sy - 9, sw + 16, 18);
   ctx.strokeStyle = 'rgba(224, 235, 224, 0.6)';
   ctx.strokeRect(Math.round(M.x + M.w / 2 - sw / 2 - 8) + 0.5, Math.round(sy - 9) + 0.5, Math.round(sw + 16), 18);
-  ctx.fillStyle = kind === 'constructive' ? HIGHLIGHT : kind === 'cancellation' ? C.ice : C.text;
+  ctx.fillStyle = s.egg?.stamp ? C.amber : kind === 'constructive' ? HIGHLIGHT : kind === 'cancellation' ? C.ice : C.text;
   ctx.fillText(stamp, M.x + M.w / 2 - sw / 2, sy + 5);
 
   // Phase bar across the bridge between the eyes and the mouth.
@@ -889,9 +1034,24 @@ export function ObserverHead({ params: p, clock, focus, effects, reducedMotion, 
   const look = useRef({ yaw: 0, pitch: 0, ty: 0, tp: 0 });
   const anim = useRef({ start: 0, pulseAt: -1e9, lastInput: 0, lastDraw: 0, brow: 0, phi: p.phi });
   const drag = useRef<{ x: number; phi: number } | null>(null);
+  const eggs = useRef({
+    times: freshEggTimes(),
+    pointer: { x: 0, y: 0, t: 0, stared: true },
+    pokes: [] as number[],
+    spin: { total: 0, last: NaN, at: 0 },
+    silentSince: NaN,
+    silenceShown: false,
+    split: { value: 0, target: 0, held: false, shownAt: NEVER },
+    tint: { build: -1, lime: null as HTMLCanvasElement | null, ice: null as HTMLCanvasElement | null },
+  });
+  const layerBuild = useRef(0);
+  const pRef = useRef(p);
+  pRef.current = p;
+  const sizeRef = useRef({ w: 0, h: 0 });
   const [hoverEye, setHoverEye] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [size, setSize] = useState({ w: 0, h: 0 });
+  sizeRef.current = size;
   const [hidden, setHidden] = useState(false);
   const arriving = useRef<FlightRect | null>(null);
 
@@ -934,7 +1094,9 @@ export function ObserverHead({ params: p, clock, focus, effects, reducedMotion, 
     if (!a.start) a.start = now;
     const entering = !reducedMotion && now - a.start < ENTRANCE_MS;
     const pulseAge = now - a.pulseAt;
-    const busy = entering || pulseAge < 600 || now - a.lastInput < 800 || moving.current || drag.current !== null;
+    const E = eggs.current;
+    const splitting = Math.abs(E.split.target - E.split.value) > 0.005 || E.split.value > 0.005;
+    const busy = entering || pulseAge < 600 || now - a.lastInput < 800 || moving.current || drag.current !== null || eggBusy(E.times, now) || splitting;
     // Nobody interacting: 30 fps is plenty for slow waves and keeps the main thread free.
     if (!force && !busy && now - a.lastDraw < IDLE_FRAME_MS) return;
     a.lastDraw = now;
@@ -946,8 +1108,11 @@ export function ObserverHead({ params: p, clock, focus, effects, reducedMotion, 
     }
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    const { yaw, pitch } = look.current;
+    const em = reducedMotion ? { yaw: 0, pitch: 0 } : eggMotion(E.times, now);
+    const yaw = Math.max(-1.3, Math.min(1.3, look.current.yaw + em.yaw));
+    const pitch = Math.max(-1.3, Math.min(1.3, look.current.pitch + em.pitch));
     const g = geometry(size.w, size.h, yaw, pitch);
+    E.split.value = reducedMotion ? E.split.target : E.split.value + (E.split.target - E.split.value) * 0.2;
     if (!layerRef.current) layerRef.current = document.createElement('canvas');
     if (!bloomRef.current) bloomRef.current = document.createElement('canvas');
     const fc = fieldRef.current;
@@ -959,6 +1124,7 @@ export function ObserverHead({ params: p, clock, focus, effects, reducedMotion, 
     if (b.W !== size.w || b.H !== size.h || Math.abs(b.yaw - yaw) > 0.004 || Math.abs(b.pitch - pitch) > 0.004) {
       buildLayer(layerRef.current, g, fieldRef.current!.field, dpr, yaw, pitch);
       built.current = { yaw, pitch, W: size.w, H: size.h };
+      layerBuild.current++;
       bloomState.current.ready = false;
     }
     // Bloom only at rest, faded in rather than popped.
@@ -984,7 +1150,36 @@ export function ObserverHead({ params: p, clock, focus, effects, reducedMotion, 
       ctx.rect(0, 0, canvas.width, canvas.height * k);
       ctx.clip();
     }
-    ctx.drawImage(layerRef.current, 0, 0);
+    if (E.split.value > 0.01) {
+      // Parallax egg: the scene seen from two viewpoints, tinted lime (left) and ice (right).
+      const tint = E.tint;
+      if (tint.build !== layerBuild.current) {
+        const make = (color: string) => {
+          const c = document.createElement('canvas');
+          c.width = layerRef.current!.width;
+          c.height = layerRef.current!.height;
+          const x = c.getContext('2d')!;
+          x.drawImage(layerRef.current!, 0, 0);
+          // Multiply tints only what is lit: the dark silhouette stays dark.
+          x.globalCompositeOperation = 'multiply';
+          x.fillStyle = color;
+          x.fillRect(0, 0, c.width, c.height);
+          x.globalCompositeOperation = 'destination-in';
+          x.drawImage(layerRef.current!, 0, 0);
+          return c;
+        };
+        tint.lime = make(C.lime);
+        tint.ice = make(C.ice);
+        tint.build = layerBuild.current;
+      }
+      const d = E.split.value * 12 * dpr;
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.85;
+      ctx.drawImage(tint.lime!, -d, 0);
+      ctx.drawImage(tint.ice!, d, 0);
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
+    } else ctx.drawImage(layerRef.current, 0, 0);
     if (effects && bs.ready) {
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = 0.38 * Math.min(1, (now - bs.since) / GLOW_FADE_MS);
@@ -992,15 +1187,21 @@ export function ObserverHead({ params: p, clock, focus, effects, reducedMotion, 
       ctx.globalCompositeOperation = 'source-over';
       ctx.globalAlpha = 1;
     }
+    const ep = eggPaint(E.times, now, reducedMotion, E.split.value);
+    if (ep.flicker) {
+      ctx.fillStyle = 'rgba(8, 13, 11, 0.55)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     paintLive(ctx, g, p, particles, {
+      egg: ep,
       t: clock.t,
       now,
       focus,
       effects,
       pulse: reducedMotion ? 0 : Math.max(0, 1 - pulseAge / PULSE_MS),
       pulseTravel: reducedMotion || pulseAge > 450 ? -1 : pulseAge / 450,
-      brow: a.brow,
+      brow: ep.brow ?? a.brow,
       thumbX: thumbX(),
       hoverEye,
       dragging,
@@ -1035,7 +1236,9 @@ export function ObserverHead({ params: p, clock, focus, effects, reducedMotion, 
     const tick = () => {
       const a = anim.current;
       const now = performance.now();
-      const active = now - a.start < ENTRANCE_MS || now - a.pulseAt < 600 || now - a.lastInput < 800 || now - bloomState.current.since < GLOW_FADE_MS;
+      const E = eggs.current;
+      const active = now - a.start < ENTRANCE_MS || now - a.pulseAt < 600 || now - a.lastInput < 800 || now - bloomState.current.since < GLOW_FADE_MS
+        || eggBusy(E.times, now) || Math.abs(E.split.target - E.split.value) > 0.005;
       if (active) drawRef.current(true);
       raf = requestAnimationFrame(tick);
     };
@@ -1083,6 +1286,157 @@ export function ObserverHead({ params: p, clock, focus, effects, reducedMotion, 
     };
   }, [reducedMotion]);
 
+  // ── Easter eggs ──────────────────────────────────────────────────────────────
+  const reducedRef = useRef(reducedMotion);
+  reducedRef.current = reducedMotion;
+  /** Head centre in viewport coordinates, and its scale. */
+  const headCentre = () => {
+    const c = canvasRef.current?.getBoundingClientRect();
+    const sz = sizeRef.current;
+    if (!c || !sz.w) return null;
+    const g = geometry(sz.w, sz.h, 0, 0);
+    return { x: c.left + g.cx, y: c.top + g.cy, S: g.S, box: headBox(g), left: c.left, top: c.top };
+  };
+
+  // Cues from elsewhere in the app: a nod ("parallax" typed), resonance, E = mc².
+  useEffect(() => onRobotCue((cue) => {
+    const now = performance.now();
+    const T = eggs.current.times;
+    if (cue === 'nod') T.nodAt = now;
+    if (cue === 'resonance') {
+      T.resonanceAt = now;
+      revealEgg('resonance', 'Driven back and forth at the same rhythm, the observer resonates. Please stop.');
+    }
+    if (cue === 'classic') T.classicAt = now;
+  }), []);
+
+  // Stare contest and dizzy circles both read the pointer.
+  useEffect(() => {
+    const move = (e: PointerEvent) => {
+      const E = eggs.current;
+      E.pointer = { x: e.clientX, y: e.clientY, t: performance.now(), stared: false };
+      if (e.pointerType === 'touch') return;
+      const h = headCentre();
+      if (!h) return;
+      const dx = e.clientX - h.x, dy = e.clientY - h.y;
+      const r = Math.hypot(dx, dy) / h.S;
+      const now = performance.now();
+      const sp = E.spin;
+      if (r < 0.25 || r > 1.9 || now - sp.at > 1200) {
+        sp.total = 0;
+        sp.last = NaN;
+      }
+      sp.at = now;
+      const ang = Math.atan2(dy, dx);
+      if (!Number.isNaN(sp.last)) {
+        let d = ang - sp.last;
+        if (d > Math.PI) d -= 2 * Math.PI;
+        if (d < -Math.PI) d += 2 * Math.PI;
+        sp.total += d;
+      }
+      sp.last = ang;
+      if (Math.abs(sp.total) >= 6 * Math.PI) {
+        sp.total = 0;
+        E.times.dizzyAt = now;
+        revealEgg('dizzy', 'Three laps around its head. The observer needs a moment.');
+      }
+    };
+    window.addEventListener('pointermove', move, { passive: true });
+    // Stare and silence are timing conditions; a light poll is enough.
+    const poll = window.setInterval(() => {
+      const E = eggs.current;
+      const now = performance.now();
+      const h = headCentre();
+      const ptr = E.pointer;
+      if (h && !ptr.stared && ptr.t && now - ptr.t > STARE_MS) {
+        const lx = ptr.x - h.left, ly = ptr.y - h.top;
+        const b = h.box;
+        if (lx > b.x && lx < b.x + b.w && ly > b.y && ly < b.y + b.h) {
+          ptr.stared = true;
+          E.times.blinkAt = now;
+          E.times.glanceDir = Math.random() < 0.5 ? -1 : 1;
+          revealEgg('stare', 'You win the staring contest. Robots blink too.');
+        }
+      }
+      // Under reduced motion nothing animates, but stamps and captions still need a frame.
+      if (reducedRef.current && eggBusy(E.times, now)) drawRef.current(true);
+      const q = pRef.current;
+      const silent = classify(q) === 'cancellation' && Math.abs(q.phi - 180) < 1e-9 && !drag.current;
+      if (silent) {
+        if (Number.isNaN(E.silentSince)) E.silentSince = now;
+        if (!E.silenceShown && now - E.silentSince > 600) {
+          E.silenceShown = true;
+          E.times.hushAt = now;
+          revealEgg('silence', 'Total destructive interference. Shhh.');
+        }
+      } else {
+        if (E.silenceShown) E.times.exhaleAt = now;
+        E.silentSince = NaN;
+        E.silenceShown = false;
+      }
+    }, 200);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      clearInterval(poll);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Parallax, literally: hold Shift and move the mouse to see the head from two viewpoints.
+  useEffect(() => {
+    const typing = (t: EventTarget | null) => t instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName);
+    const down = (e: KeyboardEvent) => {
+      if (e.key === 'Shift' && !typing(e.target)) eggs.current.split.held = true;
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') {
+        eggs.current.split.held = false;
+        eggs.current.split.target = 0;
+      }
+    };
+    const move = (e: PointerEvent) => {
+      const sp = eggs.current.split;
+      if (!sp.held || !e.shiftKey || sp.target === 1) return;
+      sp.target = 1;
+      const now = performance.now();
+      if (now - sp.shownAt > 10000) {
+        sp.shownAt = now;
+        revealEgg('parallax', 'Parallax: one object, two viewpoints. Release Shift to converge.');
+      }
+    };
+    const blur = () => {
+      eggs.current.split.held = false;
+      eggs.current.split.target = 0;
+    };
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    window.addEventListener('pointermove', move, { passive: true });
+    window.addEventListener('blur', blur);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('blur', blur);
+    };
+  }, []);
+
+  /** Five quick clicks on the forehead plate. */
+  const pokeForehead = (e: React.PointerEvent) => {
+    const h = headCentre();
+    if (!h) return false;
+    const u = (e.clientX - h.x) / h.S, v = (e.clientY - h.y) / h.S;
+    if (Math.abs(u) > 0.36 || v < -0.68 || v > -0.38) return false;
+    const E = eggs.current;
+    const now = performance.now();
+    E.pokes = [...E.pokes.filter((t) => now - t < 1500), now];
+    if (E.pokes.length >= 5) {
+      E.pokes = [];
+      E.times.ouchAt = now;
+      revealEgg('poke', 'Ouch. That is its forehead plate, not a button.');
+    }
+    return true;
+  };
+
   // Direct manipulation: drag the wave in the right eye to shift its phase.
   const inRightEye = (e: React.PointerEvent) => {
     const canvas = canvasRef.current;
@@ -1094,6 +1448,10 @@ export function ObserverHead({ params: p, clock, focus, effects, reducedMotion, 
     return x >= R.x && x <= R.x + R.w && y >= R.y && y <= R.y + R.h;
   };
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (pokeForehead(e)) {
+      drawRef.current(true);
+      return;
+    }
     if (!onPhase || !inRightEye(e)) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -1136,7 +1494,7 @@ export function ObserverHead({ params: p, clock, focus, effects, reducedMotion, 
     lctx.setTransform(fc.dpr, 0, 0, fc.dpr, 0, 0);
     paintLive(lctx, g, p, particles, {
       t: clock.t, now: performance.now(), focus: null, effects, pulse: 0, pulseTravel: -1,
-      brow: anim.current.brow, thumbX: null, hoverEye: false, dragging: false, headOnly: true, dpr: fc.dpr,
+      brow: anim.current.brow, thumbX: null, hoverEye: false, dragging: false, headOnly: true, dpr: fc.dpr, egg: null,
     });
     const box = headBox(geometry(fc.W, fc.H, 0, 0));
     const out = document.createElement('canvas');

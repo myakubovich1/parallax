@@ -1,6 +1,6 @@
 # Parallax
 
-**Turn ideas into intuition.** Parallax turns formulas and scientific questions into interactive visual experiments. The learning loop is: ask → understand → predict → experiment → explain what changed!
+**World. Explained.** Parallax turns questions about how the world works into interactive visual experiments. The learning loop is: ask → understand → predict → experiment → explain what changed!
 
 ## Run it
 
@@ -17,6 +17,7 @@ Browser checks can use system Chromium with `PARALLAX_CHROMIUM_PATH=/usr/bin/chr
 npm run verify       # 36 end-to-end interaction checks (Playwright)
 node verify/generation.mjs # custom equation UI checks (mocked provider)
 node verify/catalog.mjs    # all 47 new models, limits, aliases, save and zero API calls (dev server)
+node verify/eggs.mjs       # triggers all 12 easter eggs (no spoilers here; read the script)
 node verify/experiments.mjs # rich lessons: units, modes, predictions, comparisons and visual fallback
 node verify/background.mjs # shared background, hover, motion preferences and responsive layouts
 npm run screens      # desktop / tablet / mobile screenshots → verify/screens/
@@ -72,7 +73,7 @@ PARALLAX_API_KEY=
 PARALLAX_MODEL=gpt-5.6-sol
 ```
 
-Fill in `PARALLAX_API_KEY` privately in `.env.local` or your hosting provider's secret settings. For Vercel, add these same three variables in Project Settings → Environment Variables for Production and Preview, store the API key as a Secret, and redeploy. The server needs OpenAI API credits, HTTPS access to `api.openai.com`, and access to the configured model through the Chat Completions API with structured outputs. The example model is a configuration choice; confirm its availability for your account. OpenAI is selected only when `PARALLAX_PROVIDER=openai` is explicitly set; omitting the provider still selects Gemini, and omitting `PARALLAX_MODEL` in OpenAI mode uses the code's fallback `gpt-4.1-mini`.
+Fill in `PARALLAX_API_KEY` privately in `.env.local` or your hosting provider's secret settings. For Vercel, add these same three variables in Project Settings → Environment Variables for Production and Preview, store the API key as a Secret, and redeploy. The server needs OpenAI API credits, HTTPS access to `api.openai.com`, and access to the configured model through the Chat Completions API with structured outputs. The example model is a configuration choice; confirm its availability for your account. Runtime defaults match this example: an omitted provider selects OpenAI and an omitted OpenAI model selects `gpt-5.6-sol`. An explicit provider value takes precedence; Gemini runs only when `PARALLAX_PROVIDER=gemini` is set.
 
 **Optional Gemini alternative:** set `PARALLAX_PROVIDER=gemini`, configure `PARALLAX_GEMINI_API_KEY` from [Google AI Studio](https://aistudio.google.com/apikey), and optionally set `PARALLAX_GEMINI_MODEL` (default `gemini-3.1-flash-lite`). The Gemini variables are commented out in `.env.example`. This mode needs HTTPS access to `generativelanguage.googleapis.com`. Free-tier availability and quotas depend on account, project, region and model; review [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing). The app never automatically switches providers when a key is missing or a request fails.
 
@@ -87,7 +88,9 @@ npm start             # Node serves dist and /api on 127.0.0.1:3000
 
 Production requires the Node server, rather than a static-only host such as GitHub Pages or `vite preview`. For public hosting, use a reverse proxy with HTTPS and access controls; the endpoint consumes the server owner's API quota. The server includes per-process request and concurrency limits. Configure `HOST` and `PORT` for your host as needed. Keep secrets in the host's secret settings, outside the build output.
 
-Without a configured key, the three authored lessons still work; other prompts display a setup error. `GET /api/status` reports the selected provider and whether its key is configured, without credentials. A live provider call is needed to verify key validity and model access.
+Without a configured key, the three authored lessons still work; other prompts display a setup error. `GET /api/status` reports the selected provider, model, whether its key is configured, the required key variable, whether the provider came from an explicit environment setting or the default, and the deployment environment/commit when Vercel supplies them. It never returns key values and is not cached. A live provider call is needed to verify key validity and model access.
+
+Vercel does not import `.env.example` or your ignored `.env.local` from GitHub. Add variables to the actual Vercel project and the environment you are visiting: Production for its production domain, Preview for branch deployments. Updating variables does not change an existing deployment; redeploy to apply them. After deployment, open `/api/status` on the exact domain you are using and check `provider: "openai"`, the intended `model`, `configured: true`, and the expected Git commit. If a deployment still reports Gemini, check for an explicit `PARALLAX_PROVIDER=gemini`, a Preview branch override, or an older deployment URL. Keep API keys server-only; never use a `VITE_` prefix.
 
 Development-only QA hooks: `?demo-slow` shows the in-progress state, and `?demo-failure` triggers the recoverable-failure state.
 

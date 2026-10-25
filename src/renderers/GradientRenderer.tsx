@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { revealEgg } from '../lib/eggs';
 import { useClockDraw } from '../lib/clock';
 import { fixed, signed } from '../lib/format';
 import { DISPLAY_BOUND, MINIMUM_W, loss, nextW, slope } from '../lib/physics/gradient';
@@ -14,6 +15,7 @@ const TRACK_Y = 412;
 const X = (w: number) => X0 + ((w - W_MIN) / (W_MAX - W_MIN)) * (X1 - X0);
 const Yraw = (L: number) => Y1 - (L / L_MAX) * (Y1 - Y0);
 const Y = (L: number) => Yraw(Math.min(L, L_MAX));
+const HIGH = '#ECFFB8';
 const ease = (h: number) => (h < 0.5 ? 2 * h * h : 1 - (-2 * h + 2) ** 2 / 2);
 const inView = (w: number) => w >= W_MIN && w <= W_MAX;
 
@@ -21,6 +23,12 @@ export default function GradientRenderer({ lesson, params, clock, step, focusedT
   const { eta, w0 } = params;
   const [t, setT] = useState(clock.t);
   useClockDraw(clock, () => setT(clock.t), []);
+  // Rollercoaster egg: at η = 1 the factor 1 − 2η is −1, so the point bounces between mirror
+  // positions forever. That is real behaviour; the cart just makes it memorable.
+  const coaster = Math.abs(eta - 1) < 1e-9 && w0 !== MINIMUM_W;
+  useEffect(() => {
+    if (coaster && step >= 2) revealEgg('coaster', 'At η = 1 every step lands exactly as far on the other side. Wheee.');
+  }, [coaster, step >= 2]);
 
   const ws = useMemo(() => {
     const out = [w0];
@@ -115,10 +123,22 @@ export default function GradientRenderer({ lesson, params, clock, step, focusedT
         )}
 
         {/* Current point */}
-        {inView(pw) && (
+        {inView(pw) && !coaster && (
           <g filter={glow}>
             <circle cx={px} cy={Math.max(Y0, py)} r={focus === 'w' ? 9 : 7} fill={C.lime} />
             <circle cx={px} cy={Math.max(Y0, py)} r={14} fill="none" stroke={C.lime} strokeOpacity={0.4} />
+          </g>
+        )}
+        {inView(pw) && coaster && (
+          // Pixel cart riding the point; the rider's dot is still exactly at (w, L(w)).
+          <g transform={`translate(${px} ${Math.max(Y0, py)})`} filter={glow} shapeRendering="crispEdges">
+            <rect x={-14} y={-14} width={28} height={10} fill={C.bg} stroke={C.lime} strokeWidth={2} />
+            <rect x={-10} y={-20} width={4} height={6} fill={C.lime} />
+            <rect x={5} y={-24} width={6} height={6} fill={C.ice} />
+            <rect x={-12} y={-4} width={6} height={6} fill={C.lime} />
+            <rect x={6} y={-4} width={6} height={6} fill={C.lime} />
+            <circle r={3} fill={HIGH} />
+            <text x={18} y={-22} fill={C.amber} fontFamily="'VT323', monospace" fontSize={20}>wheee!</text>
           </g>
         )}
         {!inView(wn) && (

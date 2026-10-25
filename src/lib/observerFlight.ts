@@ -45,13 +45,36 @@ export function fly(image: HTMLCanvasElement, from: FlightRect, to: FlightRect, 
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const s = to.w / from.w;
+  // Path anchors: rise first, then sweep across, so the arc reads as the head lifting off.
+  const anchors = [
+    { o: 0, x: 0, y: 0, k: 1 },
+    { o: 0.45, x: dx * 0.32, y: dy * 0.68 - 36, k: 1 + (s - 1) * 0.6 },
+    { o: 1, x: dx, y: dy, k: s },
+  ];
+  const at = (o: number) => {
+    const i = o <= anchors[1].o ? 0 : 1;
+    const a = anchors[i], b = anchors[i + 1];
+    const u = (o - a.o) / (b.o - a.o);
+    return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u, k: a.k + (b.k - a.k) * u };
+  };
+  // Motion blur and glow peak mid-flight and clear before landing. Filters apply before the
+  // transform scales the element, so on-screen pixels are divided by the current scale.
+  const frames = [
+    { o: 0, blur: 0, glow: 0, alpha: 0 },
+    { o: 0.18, blur: 4, glow: 10, alpha: 0.4 },
+    { o: 0.45, blur: 7, glow: 16, alpha: 0.55 },
+    { o: 0.78, blur: 3.5, glow: 10, alpha: 0.45 },
+    { o: 1, blur: 0, glow: 6, alpha: 0.35 },
+  ];
   const travel = image.animate(
-    [
-      { transform: 'translate(0, 0) scale(1)', filter: 'drop-shadow(0 0 0 rgba(195,248,107,0))' },
-      // Rise first, then sweep across: the arc reads as the head lifting off the preview.
-      { offset: 0.45, transform: `translate(${dx * 0.32}px, ${dy * 0.68 - 36}px) scale(${1 + (s - 1) * 0.6})`, filter: 'drop-shadow(0 0 16px rgba(195,248,107,0.55))' },
-      { transform: `translate(${dx}px, ${dy}px) scale(${s})`, filter: 'drop-shadow(0 0 6px rgba(195,248,107,0.35))' },
-    ],
+    frames.map((f) => {
+      const p = at(f.o);
+      return {
+        offset: f.o,
+        transform: `translate(${p.x}px, ${p.y}px) scale(${p.k})`,
+        filter: `blur(${(f.blur / p.k).toFixed(2)}px) drop-shadow(0 0 ${(f.glow / p.k).toFixed(2)}px rgba(195,248,107,${f.alpha}))`,
+      };
+    }),
     { duration, easing: 'cubic-bezier(0.55, 0.05, 0.25, 1)', fill: 'forwards' },
   );
   return travel.finished

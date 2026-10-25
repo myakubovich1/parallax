@@ -5,6 +5,7 @@ import { useMediaQuery, useOnScreen, useSimClock } from '../lib/clock';
 import { LESSONS, sanitizeParams } from '../lib/lessons/registry';
 import type { ConceptId, LearningMode, LessonSpec, Params, Prediction } from '../lib/lessons/types';
 import { useSettings } from '../lib/settings';
+import { revealEgg } from '../lib/eggs';
 import { EquationStrip } from './EquationStrip';
 import { FollowUpInput, type FollowUpReply } from './FollowUpInput';
 import { Inspector, type Tab } from './Inspector';
@@ -44,6 +45,9 @@ export function LessonWorkspace({ lesson, initialMode, initialParams, onExit, on
   const [railOpen, setRailOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [reply, setReply] = useState<FollowUpReply | null>(null);
+  const [beats, setBeats] = useState(false);
+  const beatsTimer = useRef(0);
+  useEffect(() => () => clearTimeout(beatsTimer.current), []);
   const isDrawer = useMediaQuery('(min-width: 720px) and (max-width: 1099px)');
   const isMobile = useMediaQuery('(max-width: 719px)');
 
@@ -189,6 +193,18 @@ export function LessonWorkspace({ lesson, initialMode, initialParams, onExit, on
   const runFollowUp = (raw: string) => {
     const text = raw.trim();
     if (!text) return setReply({ kind: 'hint', text: 'Type a question or pick one of the suggestions.' });
+    if (lesson.id === 'wave-interference' && /^beats?\b/i.test(text)) {
+      // Easter egg: briefly step outside the equal-frequency model to show beats.
+      clearTimeout(beatsTimer.current);
+      setBeats(true);
+      if (!reducedMotion) setPlaying(true);
+      beatsTimer.current = window.setTimeout(() => setBeats(false), 12000);
+      revealEgg('beats', 'Unequal frequencies make the sum swell and fade: beats.');
+      return setReply({
+        kind: 'done',
+        text: `Easter egg: for 12 s wave 2 runs at f + 0.25 Hz, so the sum swells and fades every 4 s (beats).${reducedMotion ? ' Press Play or Step to watch it.' : ''} The readouts still describe the equal-frequency lesson.`,
+      });
+    }
     if (/\b(simpl(er|e)|quick|short(er)?|summar|brief|tl;?dr)\b/i.test(text)) {
       setMode('quick');
       return setReply({ kind: 'done', text: 'Switched to Quick intuition. Your settings are unchanged.' });
@@ -309,6 +325,7 @@ export function LessonWorkspace({ lesson, initialMode, initialParams, onExit, on
             reference,
             effects,
             reducedMotion,
+            extras: beats ? { f2: params.f + 0.25 } : undefined,
           }}
         />
         <EquationStrip

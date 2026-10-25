@@ -15,4 +15,6 @@ export interface RendererProps {
   effects: boolean;
   reducedMotion: boolean;
   compact?: boolean;
+  /** Easter-egg overrides outside the lesson's model (clearly labelled when drawn). */
+  extras?: { f2?: number };
 }

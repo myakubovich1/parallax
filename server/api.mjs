@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { providerConfig, generationRequest, readLesson, providerFailure } from './providers.mjs';
+import { providerConfig, providerStatus, generationRequest, readLesson, providerFailure } from './providers.mjs';
 import { instructions } from './lesson-instructions.mjs';
 
 // Use the platform's trusted proxy route, including injected secret bindings.
@@ -17,7 +17,7 @@ export function createApi({ getConfig = () => process.env, fetchImpl = fetch } =
     const config = getConfig();
     let provider;
     try { provider = providerConfig(config); } catch (error) { return send(503, { error: error.message }); }
-    if (path === '/api/status' && req.method === 'GET') return send(200, { provider: provider.name, configured: Boolean(provider.key) });
+    if (path === '/api/status' && req.method === 'GET') return send(200, providerStatus(config, provider));
     if (path !== '/api/generate') return send(404, { error: 'Unknown endpoint.' });
     if (req.method !== 'POST') return send(405, { error: 'Use POST.' });
     const hosts = [req.headers.host, req.headers['x-forwarded-host']].flatMap(h => h ? String(h).split(',').map(s => s.trim()) : []);

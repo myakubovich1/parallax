@@ -40,13 +40,13 @@ export const EntryScreen = forwardRef<HTMLTextAreaElement, Props>(function Entry
   return (
     <main className="entry" id="main">
       <div className="entry-index instrument-label" aria-hidden="true">
-        <span>Parallax / A field guide to ideas</span>
+        <span>Parallax / A field guide to the world</span>
         <span>Observe · Adjust · Understand</span>
       </div>
       <div className="entry-grid">
         <section className="entry-left" aria-labelledby="entry-title">
           <p className="instrument-label kicker"><span className="live-dot on" aria-hidden="true" /> The interactive science lab</p>
-          <h1 id="entry-title"><span>Equations.</span><br />Explained.</h1>
+          <h1 id="entry-title"><span>World.</span><br />Explained.</h1>
           <p className="entry-copy">Change a variable. See the whole idea.</p>
 
           <form className="entry-form" onSubmit={(e) => { e.preventDefault(); onCreate(); }} noValidate>
@@ -84,7 +84,7 @@ export const EntryScreen = forwardRef<HTMLTextAreaElement, Props>(function Entry
       <FormulaLibrary onSelect={id => { const builtin = LESSONS.find(l => l.id === id); if (builtin) onOpenLesson(builtin.id); else props.onOpenFormula(id); }}/>
       <footer className="entry-foot">
         <span className="instrument-label">Less memorizing. More understanding.</span>
-        <span className="muted small">50 preloaded formulas. AI for everything else.</span>
+        <span className="muted small">50 preloaded formulas. Explore further with AI.</span>
       </footer>
     </main>
   );

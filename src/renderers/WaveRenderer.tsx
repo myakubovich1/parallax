@@ -9,7 +9,7 @@ import {
   resultantAmplitude,
   y1,
   y2,
-  yTotal,
+  degToRad,
   type WaveParams,
 } from '../lib/physics/wave';
 import { C, MONO, seeded } from './palette';
@@ -37,6 +37,7 @@ function useCanvasSize(ref: React.RefObject<HTMLElement>) {
 
 export default function WaveRenderer(props: RendererProps) {
   const { params, clock, focusedTerm, highlight, effects, compact } = props;
+  const f2 = props.extras?.f2;
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const size = useCanvasSize(wrapRef);
@@ -58,9 +59,9 @@ export default function WaveRenderer(props: RendererProps) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    paint(ctx, size.w, size.h, p, clock.t, particles, focusedTerm, highlight, effects, !!compact);
+    paint(ctx, size.w, size.h, p, clock.t, particles, focusedTerm, highlight, effects, !!compact, f2);
   };
-  useClockDraw(clock, draw, [size, p.A1, p.A2, p.f, p.phi, focusedTerm, highlight, effects, compact]);
+  useClockDraw(clock, draw, [size, p.A1, p.A2, p.f, p.phi, focusedTerm, highlight, effects, compact, f2]);
 
   const AR = resultantAmplitude(p);
   const label = `Wave interference model. Wave 1 amplitude ${fixed(p.A1)}, wave 2 amplitude ${fixed(p.A2)}, phase difference ${fixed(p.phi, 0)} degrees, frequency ${fixed(p.f)} hertz. The sum has amplitude ${fixed(AR)}.`;
@@ -100,6 +101,7 @@ function paint(
   highlight: string | null,
   effects: boolean,
   compact: boolean,
+  f2?: number,
 ) {
   ctx.clearRect(0, 0, W, H);
   const padL = compact ? 66 : 76;
@@ -113,7 +115,13 @@ function paint(
   const c2 = c1 + 3.2 * u + gap;
   const c3 = c2 + 1.6 * u + gap + 3.1 * u;
   const X = (x: number) => padL + (x / X_SPAN_M) * plotW;
-  const AR = resultantAmplitude(p);
+  // Beats egg: wave 2 at a different frequency f₂. Its phase relative to wave 1 then drifts as
+  // φ − 2π(f₂ − f)t, so the sum's amplitude A_R(t) swells and fades with period 1/|f₂ − f|.
+  const beats = f2 !== undefined && f2 !== p.f;
+  const phiEff = beats ? (((p.phi - 360 * (f2! - p.f) * t) % 360) + 360) % 360 : p.phi;
+  const Y2 = (x: number) => (beats ? p.A2 * Math.sin(WAVE_NUMBER * x - 2 * Math.PI * f2! * t + degToRad(p.phi)) : y2(x, t, p));
+  const YT = (x: number) => y1(x, t, p) + Y2(x);
+  const AR = resultantAmplitude({ ...p, phi: phiEff });
 
   const laneFocus = (lane: 1 | 2 | 3) => {
     if (!focus) return 1;
@@ -143,8 +151,8 @@ function paint(
 
   const lanes: { c: number; half: number; fn: (x: number) => number; color: string; glyph: string; sym: string; sub: string; lane: 1 | 2 | 3 }[] = [
     { c: c1, half: 1.6 * u, fn: (x) => y1(x, t, p), color: C.lime, glyph: '●', sym: 'y₁', sub: `A₁ ${fixed(p.A1)}`, lane: 1 },
-    { c: c2, half: 1.6 * u, fn: (x) => y2(x, t, p), color: C.ice, glyph: '■', sym: 'y₂', sub: `A₂ ${fixed(p.A2)}`, lane: 2 },
-    { c: c3, half: 3.1 * u, fn: (x) => yTotal(x, t, p), color: C.text, glyph: '◎', sym: 'y', sub: `A_R ${fixed(AR)}`, lane: 3 },
+    { c: c2, half: 1.6 * u, fn: Y2, color: C.ice, glyph: '■', sym: 'y₂', sub: `A₂ ${fixed(p.A2)}`, lane: 2 },
+    { c: c3, half: 3.1 * u, fn: YT, color: C.text, glyph: '◎', sym: 'y', sub: `A_R ${fixed(AR)}`, lane: 3 },
   ];
 
   for (const L of lanes) {
@@ -179,7 +187,7 @@ function paint(
     if (L.lane === 3) {
       ctx.lineWidth = 1;
       ctx.setLineDash([3, 3]);
-      for (const [fn, col] of [[(x: number) => y1(x, t, p), 'rgba(203,255,105,0.45)'], [(x: number) => y2(x, t, p), 'rgba(169,231,255,0.45)']] as const) {
+      for (const [fn, col] of [[(x: number) => y1(x, t, p), 'rgba(203,255,105,0.45)'], [Y2, 'rgba(169,231,255,0.45)']] as const) {
         ctx.strokeStyle = col;
         ctx.beginPath();
         for (let px = 0; px <= plotW; px += 2) {
@@ -259,7 +267,7 @@ function paint(
   const omegaT = 2 * Math.PI * p.f * t;
   let x1c = (Math.PI / 2 + omegaT) / WAVE_NUMBER;
   x1c = ((((x1c - 1) % WAVELENGTH_M) + WAVELENGTH_M) % WAVELENGTH_M) + 1; // keep in [1, 2) m
-  const off = phaseOffsetMeters(p.phi);
+  const off = phaseOffsetMeters(phiEff);
   const x2c = x1c - off;
   const strong = highlight === 'phase' || focus === 'phi';
   ctx.globalAlpha = strong ? 1 : 0.6;
@@ -349,7 +357,7 @@ function paint(
   if (focus === 'f') {
     // Probe: one point of the medium, rising and falling f times per second.
     const xp = 0.25;
-    const yy = c3 - yTotal(xp, t, p) * u;
+    const yy = c3 - YT(xp) * u;
     ctx.strokeStyle = C.violet;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
@@ -365,4 +373,13 @@ function paint(
   ctx.fillStyle = focus === 't' ? C.text : C.dim;
   const tt = `t = ${fixed(t, 2)} s`;
   ctx.fillText(tt, W - padR - ctx.measureText(tt).width, 14);
+  if (beats) {
+    ctx.font = `12px ${MONO}`;
+    const note = `◆ Easter egg · beats: f₂ = ${fixed(f2!)} Hz ≠ f = ${fixed(p.f)} Hz · swells every ${fixed(1 / Math.abs(f2! - p.f), 1)} s (outside this lesson's model)`;
+    const nw = ctx.measureText(note).width;
+    ctx.fillStyle = 'rgba(8,10,13,0.85)';
+    ctx.fillRect(padL + 2, c3 - 3.1 * u + 2, Math.min(nw + 10, W - padL - padR - 4), 18);
+    ctx.fillStyle = C.amber;
+    ctx.fillText(note, padL + 7, c3 - 3.1 * u + 15);
+  }
 }

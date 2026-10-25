@@ -1,14 +1,26 @@
 import { lessonSchema, validateLesson } from './lesson.mjs';
 
 export function providerConfig(config) {
-  const name = config.PARALLAX_PROVIDER || 'gemini';
+  const name = String(config.PARALLAX_PROVIDER ?? '').trim().toLowerCase() || 'openai';
   if (!['gemini', 'openai'].includes(name)) throw new Error('Set PARALLAX_PROVIDER to gemini or openai.');
   if (name === 'gemini') {
-    const model = config.PARALLAX_GEMINI_MODEL || 'gemini-3.1-flash-lite';
+    const model = String(config.PARALLAX_GEMINI_MODEL ?? '').trim() || 'gemini-3.1-flash-lite';
     if (!['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'].includes(model)) throw new Error('Choose a supported Gemini Flash model, such as gemini-3.8-flash or gemini-3.1-flash-lite, for the free-tier integration.');
-    return { name, model, key: config.PARALLAX_GEMINI_API_KEY, missing: 'Create a Gemini free-tier key in Google AI Studio and add it securely as PARALLAX_GEMINI_API_KEY in environment settings. OpenAI will not be used as a fallback.' };
+    return { name, model, key: config.PARALLAX_GEMINI_API_KEY?.trim(), missing: 'This deployment explicitly selects Gemini, but PARALLAX_GEMINI_API_KEY is missing. To use OpenAI, set PARALLAX_PROVIDER=openai and PARALLAX_API_KEY in the deployment environment, then redeploy. Gemini is only used when explicitly selected.' };
   }
-  return { name, model: config.PARALLAX_MODEL || 'gpt-4.1-mini', key: config.PARALLAX_API_KEY, missing: 'Custom equations need a server API key. Configure PARALLAX_API_KEY securely in environment settings.' };
+  return { name, model: String(config.PARALLAX_MODEL ?? '').trim() || 'gpt-5.6-sol', key: config.PARALLAX_API_KEY?.trim(), missing: 'OpenAI is selected, but PARALLAX_API_KEY is missing in this deployment. Add this server-only secret to the Vercel project’s Production and Preview environment variables, then redeploy. Do not prefix the key name with VITE_.' };
+}
+
+export function providerStatus(config, provider) {
+  return {
+    provider: provider.name,
+    model: provider.model,
+    configured: Boolean(provider.key),
+    providerSource: String(config.PARALLAX_PROVIDER ?? '').trim() ? 'environment' : 'default',
+    requiredKeyVariable: provider.name === 'openai' ? 'PARALLAX_API_KEY' : 'PARALLAX_GEMINI_API_KEY',
+    lessonSchemaVersion: 2,
+    deployment: {environment: config.VERCEL_ENV || 'local', commit: config.VERCEL_GIT_COMMIT_SHA || null},
+  };
 }
 
 export function generationRequest(provider, instructions, request, signal) {
@@ -54,6 +66,8 @@ export function providerFailure(provider, status, failure) {
   const quota = status === 429 && ['insufficient_quota', 'credit_balance_exhausted'].includes(failure?.error?.code);
   return quota ? 'The AI account has no API credits remaining. Add credits or check billing in the OpenAI account linked to this environment, then try again.'
     : status === 429 ? 'The AI service is busy. Please try again shortly.'
-    : status === 401 ? 'The AI service rejected authentication. Check the server API key binding in environment settings.'
+    : status === 401 ? 'OpenAI rejected authentication. Check PARALLAX_API_KEY in this deployment’s environment variables and redeploy after updating it.'
+    : status === 404 || failure?.error?.code === 'model_not_found' ? 'OpenAI could not access the configured PARALLAX_MODEL. Check the model ID and API access for the project that owns PARALLAX_API_KEY.'
+    : status === 400 && failure?.error?.param === 'response_format' ? 'The configured OpenAI model rejected structured lesson output. Choose an API model that supports Chat Completions with JSON schema structured outputs.'
     : 'The AI service could not generate a lesson. Check model access and try again.';
 }

@@ -3,6 +3,8 @@ import { SavedDialog } from './components/SavedDialog';
 import { SettingsDialog } from './components/SettingsDialog';
 import { TopBar } from './components/TopBar';
 import { PhosphorBackground } from './components/PhosphorBackground';
+import { EggCaption } from './components/EggCaption';
+import { cueRobot, isMassEnergy, listenForKeyEggs, revealEgg, setOverdrive } from './lib/eggs';
 import { GenerationError } from './lib/generation/adapter';
 import { liveAdapter } from './lib/generation/liveAdapter';
 import { CatalogStage } from './renderers/CatalogStage';
@@ -11,6 +13,7 @@ import { GeneratedWorkspace } from './workspace/GeneratedWorkspace';
 import { LESSON_BY_ID, defaultParams } from './lib/lessons/registry';
 import type { ConceptId, GeneratedLessonSpec, LearningMode, LessonSpec, Params } from './lib/lessons/types';
 import { loadSaved, writeSaved, type SavedExperiment } from './lib/storage';
+import { useSettings } from './lib/settings';
 import { EntryScreen, type GenState } from './screens/EntryScreen';
 import { LessonWorkspace } from './workspace/LessonWorkspace';
 
@@ -38,6 +41,36 @@ export default function App() {
   const abortRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const keyRef = useRef(1);
+  const { reducedMotion } = useSettings();
+  const reducedMotionRef = useRef(reducedMotion);
+  reducedMotionRef.current = reducedMotion;
+
+  // Key-sequence eggs: the Konami code, and typing "parallax" outside any field.
+  useEffect(() => {
+    let overdriveTimer = 0;
+    let logoTimer = 0;
+    const stop = listenForKeyEggs({
+      konami: () => {
+        setOverdrive(true);
+        revealEgg('overdrive', 'Phosphor overdrive for 15 seconds. The dithertone poster, turned up to eleven.');
+        clearTimeout(overdriveTimer);
+        overdriveTimer = window.setTimeout(() => setOverdrive(false), 15000);
+      },
+      parallax: () => {
+        document.documentElement.dataset.logoEgg = 'on';
+        clearTimeout(logoTimer);
+        logoTimer = window.setTimeout(() => delete document.documentElement.dataset.logoEgg, 1400);
+        cueRobot('nod');
+        revealEgg('logo', 'Two viewpoints, one point. That is the whole name.');
+      },
+    });
+    return () => {
+      stop();
+      clearTimeout(overdriveTimer);
+      clearTimeout(logoTimer);
+      setOverdrive(false);
+    };
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -73,7 +106,7 @@ export default function App() {
   const create = useCallback(async () => {
     const text = prompt.trim();
     if (!text) {
-      setError('Type a question or paste an equation first, or pick one of the examples below.');
+      setError('Ask a question about the world, or pick one of the examples below.');
       inputRef.current?.focus();
       return;
     }
@@ -81,6 +114,13 @@ export default function App() {
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
+    if (isMassEnergy(text) && screen.kind === 'entry') {
+      // Everyone tries it first; give the moment a beat before the normal flow.
+      cueRobot('classic');
+      revealEgg('classic', 'E = mc². In SI units, c² ≈ 9 × 10¹⁶ m²/s², which is why a little mass is a lot of energy.');
+      await new Promise((r) => setTimeout(r, reducedMotionRef.current ? 900 : 1700));
+      if (ac.signal.aborted) return;
+    }
     setGen({ status: 'running', stage: adapter.stages[0], visible: false, stages: adapter.stages });
     const reveal = setTimeout(() => setGen((g) => (g.status === 'running' ? { ...g, visible: true } : g)), PROGRESS_DELAY_MS);
     try {
@@ -112,7 +152,7 @@ export default function App() {
     } finally {
       clearTimeout(reveal);
     }
-  }, [prompt, mode, openLesson]);
+  }, [prompt, mode, openLesson, screen.kind]);
 
   const cancel = () => {
     abortRef.current?.abort();
@@ -134,6 +174,7 @@ export default function App() {
   return (
     <div className="app">
       <PhosphorBackground />
+      <EggCaption />
       <a className="skip" href="#main">Skip to content</a>
       <TopBar onHome={() => goEntry()} onNew={() => { setPrompt(''); setError(null); goEntry(true); }} onSaved={() => setDialog('saved')} onSettings={() => setDialog('settings')} savedCount={saved.length} docked={screen.kind !== 'entry'} />
 
