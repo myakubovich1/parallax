@@ -38,7 +38,7 @@ export const EntryScreen = forwardRef<HTMLTextAreaElement, Props>(function Entry
   return (
     <main className="entry" id="main">
       <div className="entry-index instrument-label" aria-hidden="true">
-        <span>Parallax / A field guide to ideas</span>
+        <span>Parallax / A field guide to the world</span>
         <span>Observe · Adjust · Understand</span>
       </div>
       <div className="entry-grid">
@@ -81,7 +81,7 @@ export const EntryScreen = forwardRef<HTMLTextAreaElement, Props>(function Entry
       </div>
       <footer className="entry-foot">
         <span className="instrument-label">Less memorizing. More understanding.</span>
-        <span className="muted small">Custom equations use AI. Example lessons are authored.</span>
+        <span className="muted small">Explore the world with AI. Example lessons are authored.</span>
       </footer>
     </main>
   );

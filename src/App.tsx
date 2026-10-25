@@ -70,7 +70,7 @@ export default function App() {
   const create = useCallback(async () => {
     const text = prompt.trim();
     if (!text) {
-      setError('Type a question or paste an equation first, or pick one of the examples below.');
+      setError('Ask a question about the world, or pick one of the examples below.');
       inputRef.current?.focus();
       return;
     }

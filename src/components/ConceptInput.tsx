@@ -18,7 +18,7 @@ export const ConceptInput = forwardRef<HTMLTextAreaElement, Props>(function Conc
   const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
   return (
     <div className={`concept-input ${error ? 'has-error' : ''}`}>
-      <label htmlFor="concept" className="field-label">What would you like to understand?</label>
+      <label htmlFor="concept" className="field-label">What about the world would you like to understand?</label>
       <div className="textarea-wrap">
         <span className="reg tl" aria-hidden="true" />
         <span className="reg br" aria-hidden="true" />
@@ -28,7 +28,7 @@ export const ConceptInput = forwardRef<HTMLTextAreaElement, Props>(function Conc
           rows={3}
           value={value}
           disabled={disabled}
-          placeholder="Paste an equation or ask a scientific question…"
+          placeholder="Ask how something in the world works…"
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKey}
           aria-invalid={!!error}

@@ -1,6 +1,6 @@
 # Parallax
 
-**Turn ideas into intuition.** Parallax turns formulas and scientific questions into interactive visual experiments. The learning loop is: ask → understand → predict → experiment → explain what changed!
+**World. Explained.** Parallax turns questions about how the world works into interactive visual experiments. The learning loop is: ask → understand → predict → experiment → explain what changed!
 
 ## Run it
 
