@@ -65,7 +65,7 @@ export function MiniObserver() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, SIZE, SIZE);
     // Brighter, cell-filling dots: at 34 px a sparse dither reads as a dark blob.
-    drawHead(ctx, g, field.current.f, dpr, yaw, pitch, CELL, 1.75);
+    drawHead(ctx, g, field.current.f, dpr, yaw, pitch, 1.75);
     const p = observerParams;
     screen(ctx, g.eyes[0], g, (x) => y1(x, t, p), C.lime);
     screen(ctx, g.eyes[1], g, (x) => y2(x, t, p), C.ice);
