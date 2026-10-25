@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { SavedDialog } from './components/SavedDialog';
 import { SettingsDialog } from './components/SettingsDialog';
 import { TopBar } from './components/TopBar';
+import { PhosphorBackground } from './components/PhosphorBackground';
 import { GenerationError } from './lib/generation/adapter';
 import { liveAdapter } from './lib/generation/liveAdapter';
 import { CatalogStage } from './renderers/CatalogStage';
@@ -132,6 +133,7 @@ export default function App() {
 
   return (
     <div className="app">
+      <PhosphorBackground />
       <a className="skip" href="#main">Skip to content</a>
       <TopBar onHome={() => goEntry()} onNew={() => { setPrompt(''); setError(null); goEntry(true); }} onSaved={() => setDialog('saved')} onSettings={() => setDialog('settings')} savedCount={saved.length} />
 

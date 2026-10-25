@@ -122,7 +122,7 @@ export function CatalogStage({ formula: f, params: p }: { formula: Formula; para
       f.id === 'projectile'
         ? (p.v ** 2 * Math.sin((p.theta * Math.PI) / 180) ** 2) / (2 * 9.81)
         : 0;
-  const massX = f.scene === 'spring' ? 270 + (p.x || 0) * 55 : 130 + phase * 300;
+  const massX = f.scene === 'spring' ? 252 + (p.x || 0) * 55 : 130 + phase * 300;
   return (
     <InstrumentFrame
       className="catalog-stage"
@@ -229,7 +229,7 @@ export function CatalogStage({ formula: f, params: p }: { formula: Formula; para
                     fill={`url(#${uid}dots)`}
                     stroke="var(--lime)"
                   />
-                  {arrow(massX + 28, 190, 280, 190, 'var(--amber)')}
+                  {p.x !== 0 && arrow(massX + 28, 190, 280, 190, 'var(--amber)')}
                 </>
               )}
               <text x="280" y="410" textAnchor="middle" className="catalog-svg-label">
@@ -427,30 +427,30 @@ export function CatalogStage({ formula: f, params: p }: { formula: Formula; para
                 <>
                   {rings(430, 250)}
                   <circle cx="430" cy="250" r="20" fill={`url(#${uid}dots)`} stroke="var(--ice)" />
-                  {arrow(255, 195, value >= 0 ? 155 : 375, 195)}
-                  {arrow(390, 310, value >= 0 ? 490 : 270, 310)}
+                  {value !== 0 && arrow(255, 195, value > 0 ? 155 : 375, 195)}
+                  {value !== 0 && arrow(390, 310, value > 0 ? 490 : 270, 310)}
                 </>
               )}
-              {f.id !== 'coulomb' &&
+              {f.id !== 'coulomb' && value !== 0 &&
                 [0, 1, 2, 3, 4, 5, 6, 7].map((i) => {
                   const a = (i * Math.PI) / 4;
                   return (
                     <g key={i}>
                       {arrow(
-                        210 + Math.cos(a) * 70,
-                        250 + Math.sin(a) * 70,
-                        210 + Math.cos(a) * 125,
-                        250 + Math.sin(a) * 125,
+                        210 + Math.cos(a) * (value < 0 ? 125 : 70),
+                        250 + Math.sin(a) * (value < 0 ? 125 : 70),
+                        210 + Math.cos(a) * (value < 0 ? 70 : 125),
+                        250 + Math.sin(a) * (value < 0 ? 70 : 125),
                       )}
                     </g>
                   );
                 })}
               <text x="290" y="430" textAnchor="middle" className="catalog-svg-label">
                 {f.id === 'coulomb'
-                  ? value < 0
+                  ? value === 0 ? 'ZERO CHARGE · NO FORCE' : value < 0
                     ? 'UNLIKE CHARGES · ATTRACTION'
                     : 'LIKE CHARGES · REPULSION'
-                  : 'RADIAL INVERSE-SQUARE FIELD'}
+                  : f.id === 'mass-energy' ? 'REST ENERGY · E = mc²' : 'RADIAL INVERSE-SQUARE FIELD'}
               </text>
             </>
           )}

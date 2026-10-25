@@ -71,6 +71,8 @@ try {
     if (['hooke', 'snell', 'projectile', 'coulomb', 'ideal-gas', 'kinetic'].includes(f.id)) {
       await page.getByRole('button', { name: 'Reset values' }).click();
       await page.evaluate(() => document.fonts.ready);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForTimeout(50);
       await page.screenshot({ path: `verify/screens/library-${f.id}.png`, fullPage: true });
     }
     await page.getByRole('button', { name: 'Back to start' }).click();
