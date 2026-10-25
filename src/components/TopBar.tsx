@@ -1,13 +1,15 @@
 import { Icon } from './Icon';
 import { Wordmark } from './Logo';
+import { MiniObserver } from '../renderers/MiniObserver';
 
-interface Props { onHome: () => void; onNew: () => void; onSaved: () => void; onSettings: () => void; savedCount: number }
+interface Props { onHome: () => void; onNew: () => void; onSaved: () => void; onSettings: () => void; savedCount: number; docked: boolean }
 
-export function TopBar({ onHome, onNew, onSaved, onSettings, savedCount }: Props) {
+export function TopBar({ onHome, onNew, onSaved, onSettings, savedCount, docked }: Props) {
   return (
     <header className="topbar">
       <button className="brand" onClick={onHome} aria-label="Parallax home">
-        <Wordmark />
+        {/* Off the entry screen the observer head docks here in place of the logo mark. */}
+        <Wordmark mark={docked ? <MiniObserver /> : undefined} />
       </button>
       <span className="brand-line">An open mind. An interactive world.</span>
       <nav className="topnav" aria-label="Main">

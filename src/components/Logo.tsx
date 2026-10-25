@@ -11,10 +11,11 @@ export function ParallaxMark({ size = 24 }: { size?: number }) {
   );
 }
 
-export function Wordmark() {
+/** `mark` replaces the logo mark, e.g. with the docked observer head. */
+export function Wordmark({ mark }: { mark?: React.ReactNode }) {
   return (
     <span className="wordmark">
-      <ParallaxMark />
+      {mark ?? <ParallaxMark />}
       <span className="wordmark-text">PARALLAX</span>
     </span>
   );

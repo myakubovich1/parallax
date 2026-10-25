@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useClockDraw, type SimClock } from '../lib/clock';
 import { fixed } from '../lib/format';
 import { WAVELENGTH_M, WAVE_NUMBER, phaseOffsetMeters, resultantAmplitude, y1, y2, yTotal, type WaveParams } from '../lib/physics/wave';
 import { C, MONO, seeded } from './palette';
 import { fillMath } from './WaveRenderer';
+import { claimFlight, fly, leaveFlight, observerParams, type FlightRect } from '../lib/observerFlight';
 
 /**
  * Entry-screen "observer": a dot-matrix android whose two eyes are the two source
@@ -11,11 +12,11 @@ import { fillMath } from './WaveRenderer';
  * eyes and mouth is the real wave model, drawn at one shared vertical scale.
  */
 
-const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+export const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 const CELL = 3; // dot-matrix pitch in CSS px
-const EYE = { x: 0.325, v: -0.1, hw: 0.285, hh: 0.14, r: 0.05 };
+export const EYE = { x: 0.325, v: -0.1, hw: 0.285, hh: 0.14, r: 0.05 };
 const EYE_SPAN_M = 2 * WAVELENGTH_M;
-const HIGHLIGHT = '#ECFFB8';
+export const HIGHLIGHT = '#ECFFB8';
 const PIXEL = "'VT323', 'IBM Plex Mono', monospace";
 
 interface Props {
@@ -26,8 +27,8 @@ interface Props {
   reducedMotion: boolean;
 }
 
-interface Rect { x: number; y: number; w: number; h: number }
-interface Geometry {
+export interface Rect { x: number; y: number; w: number; h: number }
+export interface Geometry {
   W: number;
   H: number;
   S: number;
@@ -40,6 +41,8 @@ interface Geometry {
   mouthV: number;
   mouthHH: number;
   swatches: boolean;
+  pad: number;
+  parallax: number; // how far raised features shift when the head turns
 }
 
 const sdRoundBox = (px: number, py: number, bx: number, by: number, r: number) => {
@@ -51,13 +54,28 @@ const sdRoundBox = (px: number, py: number, bx: number, by: number, r: number) =
 function geometry(W: number, H: number, yaw: number, pitch: number): Geometry {
   const narrow = W < 520;
   const S = Math.max(60, Math.min((H - 20) / 1.74, narrow ? (W - 8) / 1.36 : (W - 128) / 1.62));
-  const cx = W / 2;
   const cy = Math.max(20 + 0.92 * S, (H - 1.74 * S) / 2 + 0.92 * S);
-  const unit = Math.max(4, (EYE.hh * S - 7) / 1.6);
-  const mouthHH = (2.15 * unit + 7) / S; // preview amplitudes are fixed at 1, so |y| ≤ 2
+  return headGeometry(W, H, S, W / 2, cy, yaw, pitch, { pad: 7, swatches: !narrow && W > 600, parallax: 1 });
+}
+
+/** Head region shared by the preview, the flight snapshot and the docked miniature. */
+export const HEAD_BOX = { u0: -0.84, u1: 0.84, v0: -0.96, v1: 0.72 };
+export const headBox = (g: Geometry): Rect => ({
+  x: g.cx + HEAD_BOX.u0 * g.S,
+  y: g.cy + HEAD_BOX.v0 * g.S,
+  w: (HEAD_BOX.u1 - HEAD_BOX.u0) * g.S,
+  h: (HEAD_BOX.v1 - HEAD_BOX.v0) * g.S,
+});
+
+export function headGeometry(
+  W: number, H: number, S: number, cx: number, cy: number, yaw: number, pitch: number,
+  { pad, swatches, parallax }: { pad: number; swatches: boolean; parallax: number },
+): Geometry {
+  const unit = Math.max(pad > 2 ? 4 : 0.5, (EYE.hh * S - pad) / 1.6);
+  const mouthHH = (2.15 * unit + pad) / S; // preview amplitudes are fixed at 1, so |y| ≤ 2
   const mouthV = EYE.v + EYE.hh + 0.1 + mouthHH;
   // Raised features shift further than the skull when the head turns: parallax.
-  const shift = (dome: number) => ({ dx: yaw * 0.07 * dome * S, dy: pitch * 0.05 * dome * S });
+  const shift = (dome: number) => ({ dx: yaw * 0.07 * dome * S * parallax, dy: pitch * 0.05 * dome * S * parallax });
   const eyeShift = shift(0.86);
   const eyes = [-1, 1].map((s) => ({
     x: cx + (s * EYE.x - EYE.hw) * S + eyeShift.dx,
@@ -67,11 +85,11 @@ function geometry(W: number, H: number, yaw: number, pitch: number): Geometry {
   })) as [Rect, Rect];
   const mShift = shift(0.62);
   const mouth = { x: cx - 0.36 * S + mShift.dx, y: cy + (mouthV - mouthHH) * S + mShift.dy, w: 0.72 * S, h: 2 * mouthHH * S };
-  return { W, H, S, cx, cy, unit, pxPerM: (eyes[0].w - 12) / EYE_SPAN_M, eyes, mouth, mouthV, mouthHH, swatches: !narrow && W > 600 };
+  return { W, H, S, cx, cy, unit, pxPerM: (eyes[0].w - 2 * pad) / EYE_SPAN_M, eyes, mouth, mouthV, mouthHH, swatches, pad, parallax };
 }
 
 /** Height field of the head in face units. region: 0 none, 1 shell, 2 eye screen, 3 mouth screen. */
-function sampleHead(u: number, v: number, yaw: number, pitch: number, g: Geometry): [number, number] {
+export function sampleHead(u: number, v: number, yaw: number, pitch: number, g: Geometry): [number, number] {
   const rx = v > 0.1 ? 0.74 - (v - 0.1) * 0.45 : 0.74;
   const e = (u / rx) ** 2 + ((v + 0.12) / 0.82) ** 2;
   if (e >= 1) {
@@ -113,7 +131,7 @@ function sampleHead(u: number, v: number, yaw: number, pitch: number, g: Geometr
   return [h, 1];
 }
 
-interface Field {
+export interface Field {
   cols: number;
   rows: number;
   left: number;
@@ -123,20 +141,21 @@ interface Field {
   nx: Float32Array;
   ny: Float32Array;
   nz: Float32Array;
+  cell: number;
   silhouette: HTMLCanvasElement;
 }
 
 /** Surface of the head at rest, computed once per size. Turning only relights and shifts it. */
-function buildField(g: Geometry, dpr: number): Field {
-  const top = Math.max(0, Math.floor((g.cy - 0.96 * g.S) / CELL));
-  const bottom = Math.min(Math.ceil(g.H / CELL), Math.ceil((g.cy + 1.02 * g.S) / CELL));
-  const left = Math.max(0, Math.floor((g.cx - 0.86 * g.S) / CELL));
-  const right = Math.min(Math.ceil(g.W / CELL), Math.ceil((g.cx + 0.86 * g.S) / CELL));
+export function buildField(g: Geometry, dpr: number, cell = CELL): Field {
+  const top = Math.max(0, Math.floor((g.cy - 0.96 * g.S) / cell));
+  const bottom = Math.min(Math.ceil(g.H / cell), Math.ceil((g.cy + 1.02 * g.S) / cell));
+  const left = Math.max(0, Math.floor((g.cx - 0.86 * g.S) / cell));
+  const right = Math.min(Math.ceil(g.W / cell), Math.ceil((g.cx + 0.86 * g.S) / cell));
   const cols = right - left;
   const rows = bottom - top;
   const n = cols * rows;
   const f: Field = {
-    cols, rows, left, top,
+    cols, rows, left, top, cell,
     region: new Uint8Array(n), dome: new Float32Array(n), nx: new Float32Array(n), ny: new Float32Array(n), nz: new Float32Array(n),
     silhouette: document.createElement('canvas'),
   };
@@ -146,17 +165,17 @@ function buildField(g: Geometry, dpr: number): Field {
   const sctx = sil.getContext('2d')!;
   sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   sctx.fillStyle = C.bg;
-  const eps = CELL / g.S;
+  const eps = cell / g.S;
   const tilt = 2.4; // exaggerated relief so the dither carries form, not flat fields
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const i = r * cols + c;
-      const u = ((left + c) * CELL - g.cx) / g.S;
-      const v = ((top + r) * CELL - g.cy) / g.S;
+      const u = ((left + c) * cell - g.cx) / g.S;
+      const v = ((top + r) * cell - g.cy) / g.S;
       const region = sampleHead(u, v, 0, 0, g)[1];
       if (!region) continue;
       f.region[i] = region;
-      sctx.fillRect((left + c) * CELL, (top + r) * CELL, CELL, CELL);
+      sctx.fillRect((left + c) * cell, (top + r) * cell, cell, cell);
       const rx = v > 0.1 ? 0.74 - (v - 0.1) * 0.45 : 0.74;
       f.dome[i] = Math.sqrt(Math.max(0, 1 - (u / rx) ** 2 - ((v + 0.12) / 0.82) ** 2));
       if (region > 1) continue;
@@ -172,7 +191,7 @@ function buildField(g: Geometry, dpr: number): Field {
   return f;
 }
 
-function buildLayer(layer: HTMLCanvasElement, g: Geometry, f: Field, dpr: number, yaw: number, pitch: number, bloom: boolean) {
+function buildLayer(layer: HTMLCanvasElement, g: Geometry, f: Field, dpr: number, yaw: number, pitch: number, bloom: boolean, scene = true) {
   if (layer.width !== Math.round(g.W * dpr) || layer.height !== Math.round(g.H * dpr)) {
     layer.width = Math.round(g.W * dpr);
     layer.height = Math.round(g.H * dpr);
@@ -180,7 +199,28 @@ function buildLayer(layer: HTMLCanvasElement, g: Geometry, f: Field, dpr: number
   const ctx = layer.getContext('2d')!;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, g.W, g.H);
+  if (scene) drawScene(ctx, g, yaw, pitch);
+  drawHead(ctx, g, f, dpr, yaw, pitch, 2);
 
+  if (bloom) {
+    // Phosphor bloom: one blurred additive copy, built only once the head is at rest.
+    const copy = document.createElement('canvas');
+    copy.width = layer.width;
+    copy.height = layer.height;
+    copy.getContext('2d')!.drawImage(layer, 0, 0);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.38;
+    ctx.filter = `blur(${Math.round(5 * dpr)}px)`;
+    ctx.drawImage(copy, 0, 0);
+    ctx.filter = 'none';
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  ctx.globalAlpha = 1;
+}
+
+
+function drawScene(ctx: CanvasRenderingContext2D, g: Geometry, yaw: number, pitch: number) {
   // Perspective tunnel behind the head; its vanishing point drifts against the head.
   const vx = g.cx - yaw * 16;
   const vy = g.cy - 0.18 * g.S - pitch * 12;
@@ -219,9 +259,13 @@ function buildLayer(layer: HTMLCanvasElement, g: Geometry, f: Field, dpr: number
     ctx.strokeRect(Math.round(r.x) + 0.5, Math.round(r.y) + 0.5, Math.round(r.w), Math.round(r.h));
   }
 
+}
+
+/** Silhouette plus relit dot matrix. Cheap: the surface itself comes from the cached field. */
+export function drawHead(ctx: CanvasRenderingContext2D, g: Geometry, f: Field, dpr: number, yaw: number, pitch: number, dot: number, gain = 1) {
   // Occlude the tunnel behind the head, shifted with the skull.
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.drawImage(f.silhouette, Math.round(yaw * 0.035 * g.S * dpr), Math.round(pitch * 0.025 * g.S * dpr));
+  ctx.drawImage(f.silhouette, Math.round(yaw * 0.035 * g.S * g.parallax * dpr), Math.round(pitch * 0.025 * g.S * g.parallax * dpr));
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   // Relight: key light follows the gaze, plus a cool rim from the right and a specular glint.
@@ -243,35 +287,21 @@ function buildLayer(layer: HTMLCanvasElement, g: Geometry, f: Field, dpr: number
       const rim = Math.max(0, nx * 0.8 - ny * 0.1) ** 3 * 0.35;
       const d = f.dome[i];
       const fill = Math.max(0, nz * 0.75 + ny * 0.35) * 0.3; // soft fill from below-front
-      const b = (0.03 + 0.82 * diffuse ** 1.9 + fill + rim + 0.55 * spec) * (0.45 + 0.55 * Math.min(1, d * 1.8 + 0.2));
+      const b = gain * (0.03 + 0.82 * diffuse ** 1.9 + fill + rim + 0.55 * spec) * (0.45 + 0.55 * Math.min(1, d * 1.8 + 0.2));
       const col = f.left + c, row = f.top + r;
       if ((BAYER[(row % 4) * 4 + (col % 4)] + 0.5) / 16 >= b) continue;
-      const px = col * CELL + yaw * 0.07 * d * g.S;
-      const py = row * CELL + pitch * 0.05 * d * g.S;
+      const px = col * f.cell + yaw * 0.07 * d * g.S * g.parallax;
+      const py = row * f.cell + pitch * 0.05 * d * g.S * g.parallax;
       (b > 0.85 ? glint : lime).push(px, py);
     }
   }
   ctx.fillStyle = C.lime;
   ctx.globalAlpha = 0.9;
-  for (let k = 0; k < lime.length; k += 2) ctx.fillRect(lime[k], lime[k + 1], 2, 2);
+  for (let k = 0; k < lime.length; k += 2) ctx.fillRect(lime[k], lime[k + 1], dot, dot);
   ctx.fillStyle = HIGHLIGHT;
   ctx.globalAlpha = 1;
-  for (let k = 0; k < glint.length; k += 2) ctx.fillRect(glint[k], glint[k + 1], 2, 2);
+  for (let k = 0; k < glint.length; k += 2) ctx.fillRect(glint[k], glint[k + 1], dot, dot);
 
-  if (bloom) {
-    // Phosphor bloom: one blurred additive copy, built only once the head is at rest.
-    const copy = document.createElement('canvas');
-    copy.width = layer.width;
-    copy.height = layer.height;
-    copy.getContext('2d')!.drawImage(layer, 0, 0);
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.38;
-    ctx.filter = `blur(${Math.round(5 * dpr)}px)`;
-    ctx.drawImage(copy, 0, 0);
-    ctx.filter = 'none';
-    ctx.globalCompositeOperation = 'source-over';
-  }
   ctx.globalAlpha = 1;
 }
 
@@ -390,6 +420,8 @@ export function ObserverHead({ params: p, clock, focus, effects, reducedMotion }
   const moving = useRef(false);
   const look = useRef({ yaw: 0, pitch: 0, ty: 0, tp: 0 });
   const [size, setSize] = useState({ w: 0, h: 0 });
+  const [hidden, setHidden] = useState(false);
+  const arriving = useRef<FlightRect | null>(null);
 
   const particles = useMemo<Particle[]>(() => {
     const rnd = seeded(11);
@@ -478,16 +510,72 @@ export function ObserverHead({ params: p, clock, focus, effects, reducedMotion }
     };
   }, [reducedMotion]);
 
+  // The docked miniature keeps showing whatever phase the learner left here.
+  useEffect(() => {
+    Object.assign(observerParams, p);
+  }, [p]);
+
+  /** Head only (no tunnel, probes or serial), cropped to HEAD_BOX, in viewport coordinates. */
+  const snapshot = (): { image: HTMLCanvasElement; rect: FlightRect } | null => {
+    const el = wrapRef.current;
+    const fc = fieldRef.current;
+    if (!el || !fc) return null;
+    const { yaw, pitch } = look.current;
+    const g = geometry(fc.W, fc.H, yaw, pitch);
+    const layer = document.createElement('canvas');
+    buildLayer(layer, g, fc.field, fc.dpr, yaw, pitch, false, false);
+    const lctx = layer.getContext('2d')!;
+    lctx.setTransform(fc.dpr, 0, 0, fc.dpr, 0, 0);
+    paintLive(lctx, g, p, clock.t, particles, null, effects, true);
+    const box = headBox(geometry(fc.W, fc.H, 0, 0));
+    const out = document.createElement('canvas');
+    out.width = Math.round(box.w * fc.dpr);
+    out.height = Math.round(box.h * fc.dpr);
+    out.getContext('2d')!.drawImage(layer, box.x * fc.dpr, box.y * fc.dpr, box.w * fc.dpr, box.h * fc.dpr, 0, 0, out.width, out.height);
+    const r = el.getBoundingClientRect();
+    return { image: out, rect: { x: r.left + box.x, y: r.top + box.y, w: box.w, h: box.h } };
+  };
+  const snapshotRef = useRef(snapshot);
+  snapshotRef.current = snapshot;
+
+  // Leaving the entry screen: hand the head to the top bar. Returning: wait for it to land.
+  useLayoutEffect(() => {
+    if (!reducedMotion) {
+      const back = claimFlight('undock');
+      if (back) {
+        arriving.current = back.from;
+        setHidden(true);
+      }
+    }
+    return () => {
+      if (reducedMotionRef.current) return;
+      const shot = snapshotRef.current();
+      if (shot) leaveFlight('dock', shot.rect, shot.image);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const reducedMotionRef = useRef(reducedMotion);
+  reducedMotionRef.current = reducedMotion;
+
+  useEffect(() => {
+    const from = arriving.current;
+    if (!from || !size.w || !fieldRef.current) return;
+    arriving.current = null;
+    const shot = snapshotRef.current();
+    if (!shot) return setHidden(false);
+    void fly(shot.image, from, shot.rect).then(() => setHidden(false));
+  }, [size]);
+
   const AR = resultantAmplitude(p);
   const label = `Live wave model drawn as a dot-matrix robot face. Left eye: wave 1, amplitude ${fixed(p.A1)}. Right eye: wave 2, amplitude ${fixed(p.A2)}, shifted by ${fixed(p.phi, 0)} degrees. Mouth: their sum, amplitude ${fixed(AR)}.`;
   return (
-    <div className="stage-canvas observer" ref={wrapRef}>
+    <div className={`stage-canvas observer${hidden ? ' awaiting' : ''}`} ref={wrapRef}>
       <canvas ref={canvasRef} role="img" aria-label={label} style={{ width: size.w, height: size.h }} />
     </div>
   );
 }
 
-function paintLive(ctx: CanvasRenderingContext2D, g: Geometry, p: WaveParams, t: number, particles: Particle[], focus: string | null, effects: boolean) {
+function paintLive(ctx: CanvasRenderingContext2D, g: Geometry, p: WaveParams, t: number, particles: Particle[], focus: string | null, effects: boolean, headOnly = false) {
   const AR = resultantAmplitude(p);
   const compact = g.W < 520;
   const [L, R] = g.eyes;
@@ -598,6 +686,7 @@ function paintLive(ctx: CanvasRenderingContext2D, g: Geometry, p: WaveParams, t:
   ctx.fillStyle = C.amber;
   ctx.fillText(phText, g.cx - pw / 2, bridgeY + 1);
 
+  if (headOnly) return;
   // Serial header reads the live parameters, dossier-style.
   ctx.fillStyle = C.lime;
   ctx.font = `${compact ? 18 : 22}px ${PIXEL}`;

@@ -948,3 +948,10 @@ input[type='range']:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(
   }
 }
 @media (forced-colors: active) { .phosphor-background { display: none; } }
+
+/* Observer head hand-off between the entry preview and the top bar. */
+.mini-observer { display: block; flex: none; image-rendering: pixelated; transition: opacity 160ms ease-out; }
+.mini-observer.landing { opacity: 0; }
+[data-effects='on'] .mini-observer.glow { filter: drop-shadow(0 0 5px rgba(195, 248, 107, 0.35)); }
+.observer canvas { transition: opacity 200ms ease-out; }
+.observer.awaiting canvas { opacity: 0; }

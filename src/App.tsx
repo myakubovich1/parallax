@@ -127,7 +127,7 @@ export default function App() {
     <div className="app">
       <PhosphorBackground />
       <a className="skip" href="#main">Skip to content</a>
-      <TopBar onHome={() => goEntry()} onNew={() => { setPrompt(''); setError(null); goEntry(true); }} onSaved={() => setDialog('saved')} onSettings={() => setDialog('settings')} savedCount={saved.length} />
+      <TopBar onHome={() => goEntry()} onNew={() => { setPrompt(''); setError(null); goEntry(true); }} onSaved={() => setDialog('saved')} onSettings={() => setDialog('settings')} savedCount={saved.length} docked={screen.kind !== 'entry'} />
 
       {screen.kind === 'entry' ? (
         <EntryScreen
