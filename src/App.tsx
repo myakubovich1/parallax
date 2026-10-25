@@ -4,6 +4,7 @@ import { SettingsDialog } from './components/SettingsDialog';
 import { TopBar } from './components/TopBar';
 import { HelpAssistant } from './components/HelpAssistant';
 import { readGuideContext, type GuideAction } from './lib/help';
+import {useGuideExperiment} from './lib/guideExperiment';
 import { PhosphorBackground } from './components/PhosphorBackground';
 import { EggCaption } from './components/EggCaption';
 import { cueRobot, isMassEnergy, listenForKeyEggs, revealEgg, setOverdrive } from './lib/eggs';
@@ -186,7 +187,8 @@ export default function App() {
     setToast(ok ? 'Saved to this browser. Find it in Saved experiments.' : 'Couldn’t save: this browser’s storage is unavailable.');
   };
 
-  const getHelpContext = useCallback(() => readGuideContext(saved.length), [saved.length]);
+  const guideExperiment = useGuideExperiment();
+  const getHelpContext = useCallback(() => readGuideContext(saved.length, guideExperiment.read(), guideExperiment.focused()), [saved.length, guideExperiment]);
   const openHelp = useCallback((trigger: HTMLElement) => {
     helpTrigger.current = trigger;
     setHelpOpen(true);
@@ -218,8 +220,8 @@ export default function App() {
     } else if (action.type === 'open-saved') setDialog('saved');
     else if (action.type === 'open-settings') setDialog('settings');
     else requestAnimationFrame(() => {
-      const context = readGuideContext(saved.length);
-      const target = action.type === 'highlight-control' && context.controls.some(c => c.id === action.controlId) ? document.getElementById(action.controlId) : action.type === 'show-modes' ? document.querySelector<HTMLElement>('#main .mode-selector input:checked') : null;
+      const context = getHelpContext();
+      const target = action.type === 'highlight-control' && context.controls.some(c => c.id === action.controlId && c.available) ? document.getElementById(action.controlId) : action.type === 'show-modes' ? document.querySelector<HTMLElement>('.mode-selector input:checked') : null;
       if (!target) {setToast('That control isn’t on this screen. Open its experiment and ask again.'); return;}
       if (helpHighlight.current) {clearTimeout(helpHighlight.current.timer); helpHighlight.current.node.classList.remove('guide-highlight');}
       target.scrollIntoView({block: 'center', behavior: 'instant'}); target.focus();

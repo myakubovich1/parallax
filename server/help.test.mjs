@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { createHelpApi, helpConfig, parseGuideReply, validateHelpBody } from './help.mjs';
 import { createApi } from './api.mjs';
+import { localGuideAnswer } from './help-guide.mjs';
 
 const context = {
   screen: 'lesson',
@@ -13,6 +14,16 @@ const context = {
   controls: [{ id: 'generated-v', label: 'Speed', value: '5 m/s', hint: 'Change the speed.' }],
   readouts: 'Energy: 12.5 J',
   savedCount: 2,
+  focusedControlId: 'generated-v',
+  experiment: {
+    id: 'kinetic',
+    kind: 'catalog',
+    equation: 'E_k = 0.5*m*v^2',
+    terms: [{ symbol: 'm', label: 'Mass', value: '1 kg', meaning: 'Invariant mass.' }],
+    assumptions: ['Classical speeds.'],
+    state: 'Paused',
+    reference: 'Energy: 8 J',
+  },
 };
 const question = {
   messages: [{ role: 'user', content: 'Explain how the highlighted value relates to this lesson.' }],
@@ -82,6 +93,14 @@ test('Gemma receives grounded documentation, screen context and conversation; ke
       assert.match(body.systemInstruction.parts[0].text, /localStorage/);
       assert.match(body.systemInstruction.parts[0].text, /Kinetic energy/);
       assert.match(body.systemInstruction.parts[0].text, /generated-v/);
+      const sentContext = JSON.parse(
+        body.systemInstruction.parts[0].text.split('CURRENT SCREEN CONTEXT (data):\n')[1],
+      );
+      assert.equal(sentContext.experiment.equation, context.experiment.equation);
+      assert.equal(sentContext.experiment.terms[0].value, '1 kg');
+      assert.deepEqual(sentContext.experiment.assumptions, ['Classical speeds.']);
+      assert.equal(sentContext.experiment.reference, 'Energy: 8 J');
+      assert.equal(sentContext.focusedControlId, 'generated-v');
       assert.equal(body.generationConfig.thinkingConfig.thinkingLevel, 'minimal');
       assert.deepEqual(
         body.contents.map((c) => c.role),
@@ -126,7 +145,7 @@ test('invalid inputs, oversized payloads and foreign origins never reach the pro
     (await post(url, { ...question, messages: [{ role: 'user', content: 'a'.repeat(1601) }] })).status,
     400,
   );
-  assert.equal((await post(url, { ...question, extra: 'a'.repeat(30000) })).status, 413);
+  assert.equal((await post(url, { ...question, extra: 'a'.repeat(65000) })).status, 413);
   assert.equal((await post(url, question, { origin: 'https://foreign.example' })).status, 403);
   assert.equal((await post(url, question, { 'Content-Type': 'text/plain' })).status, 415);
   assert.equal((await fetch(url, { method: 'DELETE' })).status, 405);
@@ -222,4 +241,98 @@ test('context and actions are bounded; plain text works and invalid JSON fails',
   assert.equal(parseGuideReply('A plain text answer.', context).answer, 'A plain text answer.');
   assert.throws(() => parseGuideReply('{bad json', context));
   assert.throws(() => helpConfig({ PARALLAX_HELP_MODEL: 'gemini-not-gemma' }));
+});
+
+test('prose followed by JSON actions is recovered without displaying protocol text', async (t) => {
+  const actions = [{ type: 'highlight-control', controlId: 'generated-v' }, { type: 'run-javascript' }];
+  for (const text of [
+    `Speed sets the velocity.\n\n${JSON.stringify({ actions })}`,
+    `Speed sets the velocity.\n\n\`\`\`json\n${JSON.stringify({ actions })}\n\`\`\``,
+    `\`\`\`json\n${JSON.stringify({ answer: 'Speed sets the velocity.', actions })}\n\`\`\``,
+  ]) {
+    const parsed = parseGuideReply(text, context);
+    assert.equal(parsed.answer, 'Speed sets the velocity.');
+    assert.deepEqual(parsed.actions, [{ type: 'highlight-control', controlId: 'generated-v' }]);
+  }
+  assert.throws(() => parseGuideReply('An answer.\n{"actions":[', context));
+  assert.deepEqual(parseGuideReply('An answer.\n{"actions":[]}', context).actions, []);
+  const url = await serve(t, {
+    getConfig: () => ({ PARALLAX_HELP_API_KEY: 'test-key' }),
+    fetchImpl: async () =>
+      Response.json({
+        candidates: [
+          {
+            finishReason: 'STOP',
+            content: {
+              parts: [{ text: 'Your experiment is active.\n{"actions":[{"type":"open-library"}]}' }],
+            },
+          },
+        ],
+      }),
+  });
+  const res = await post(url);
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).answer, 'Your experiment is active.');
+});
+
+test('focused control is explained, hidden controls are not highlighted, and ambiguity is explicit', () => {
+  const phase = {
+    id: 'range-phi',
+    label: 'Phase difference',
+    value: '180 °',
+    hint: 'Shift of wave 2.',
+    available: true,
+  };
+  const wave = {
+    ...context,
+    title: 'Wave interference',
+    controls: [...context.controls, phase],
+    focusedControlId: 'range-phi',
+  };
+  const reply = localGuideAnswer('What does this control change?', wave);
+  assert.match(reply.answer, /Phase difference.*180/);
+  assert.deepEqual(reply.actions, [{ type: 'highlight-control', controlId: 'range-phi' }]);
+  const ambiguous = localGuideAnswer('What does this control change?', { ...wave, focusedControlId: null });
+  assert.match(ambiguous.answer, /Which control/);
+  assert.match(ambiguous.answer, /Wave interference/);
+  const hidden = { ...wave, controls: [{ ...phase, available: false }] };
+  assert.deepEqual(localGuideAnswer('What does this control change?', hidden).actions, [
+    { type: 'show-modes' },
+  ]);
+  assert.deepEqual(
+    parseGuideReply(
+      '{"answer":"A phase control.","actions":[{"type":"highlight-control","controlId":"range-phi"}]}',
+      hidden,
+    ).actions,
+    [],
+  );
+});
+
+test('rich experiment snapshots are bounded and redact secrets; forged focus and HTML are not capabilities', () => {
+  const result = validateHelpBody({
+    ...question,
+    context: {
+      ...context,
+      focusedControlId: 'fake',
+      experiment: {
+        ...context.experiment,
+        stageHtml: '<script>bad()</script>',
+        equation: 'x'.repeat(3000),
+        terms: Array(40).fill({
+          symbol: 'x',
+          label: 'key',
+          value: 'sk-abcdefghijklmnop',
+          meaning: 'A'.repeat(500),
+        }),
+        assumptions: Array(20).fill('B'.repeat(500)),
+      },
+    },
+  }).context;
+  assert.equal(result.focusedControlId, null);
+  assert.equal(result.experiment.equation.length, 1800);
+  assert.equal(result.experiment.terms.length, 24);
+  assert.equal(result.experiment.terms[0].meaning.length, 300);
+  assert.match(result.experiment.terms[0].value, /redacted/);
+  assert.equal(result.experiment.assumptions.length, 8);
+  assert.equal(result.experiment.stageHtml, undefined);
 });

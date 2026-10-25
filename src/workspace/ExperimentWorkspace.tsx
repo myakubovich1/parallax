@@ -8,6 +8,8 @@ import type { ExperimentLesson, LearningMode, Params, TermTone } from '../lib/le
 import { ExperimentStage, quantity } from '../renderers/ExperimentStage';
 import { CheckedCustomStage } from '../renderers/CheckedCustomStage';
 import { ParameterControl } from './ParameterControl';
+import {usePublishGuideExperiment} from '../lib/guideExperiment';
+import {generatedGuideSnapshot} from '../lib/guideSnapshots';
 
 const TONES: TermTone[] = ['lime', 'ice', 'amber', 'violet'];
 const STEPS = ['Background', 'Understand the model', 'Try it yourself'];
@@ -122,6 +124,7 @@ export function ExperimentWorkspace({
   };
   const showControls = (mode === 'explore' && tab === 'experiment') || (mode === 'basics' && step === 2);
   const showPrediction = (mode === 'explore' && tab === 'challenge') || (mode === 'basics' && step === 2);
+  usePublishGuideExperiment(() => generatedGuideSnapshot(lesson, params, mode, reference, `Panel: ${tab}; basics step ${step + 1}. ${status} ${domainError ?? ''} ${customIssue ?? ''}`));
 
   const prediction = (
     <section className="experiment-prediction" aria-label="Prediction challenge">

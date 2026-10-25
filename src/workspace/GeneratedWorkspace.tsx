@@ -4,6 +4,8 @@ import { isExperiment, type GeneratedLessonSpec, type LegacyGeneratedLesson, typ
 import { ExperimentWorkspace } from './ExperimentWorkspace';
 import { SandboxedStage } from '../renderers/SandboxedStage';
 import { MathText } from '../components/MathText';
+import {usePublishGuideExperiment} from '../lib/guideExperiment';
+import {generatedGuideSnapshot} from '../lib/guideSnapshots';
 
 interface Props {lesson: GeneratedLessonSpec; initialMode?: LearningMode; initialParams?: Params; onExit: () => void; onSave: (params: Params, mode: LearningMode) => void; stage?: (params: Params) => ReactNode; label?: string}
 export function GeneratedWorkspace(props: Props) {
@@ -13,6 +15,7 @@ export function GeneratedWorkspace(props: Props) {
 function LegacyWorkspace({ lesson, initialParams, initialMode = 'explore', onExit, onSave, stage, label }: Omit<Props, 'lesson'> & {lesson: LegacyGeneratedLesson}) {
   const defaults = () => Object.fromEntries(lesson.params.map(p => [p.id, p.default]));
   const [params, setParams] = useState(() => Object.fromEntries(lesson.params.map(p => [p.id, Math.max(p.min, Math.min(p.max, initialParams?.[p.id] ?? p.default))])));
+  usePublishGuideExperiment(() => generatedGuideSnapshot(lesson, params, initialMode));
   return (
     <main id="main" className="generated-workspace">
       <header className="generated-toolbar">

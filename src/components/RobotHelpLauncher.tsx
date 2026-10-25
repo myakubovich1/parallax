@@ -43,7 +43,7 @@ export function RobotHelpLauncher({
         aria-expanded={open}
         aria-controls="parallax-help-dialog"
         onFocus={() => {
-          if (!open) setPreview(true);
+          if (!open && button.current?.matches(':focus-visible')) setPreview(true);
         }}
         onClick={(event) => {
           clear();

@@ -9,6 +9,9 @@ import { useSettings } from '../lib/settings';
 import { cueRobot, isOverdrive, onOverdrive } from '../lib/eggs';
 import { BAYER, ObserverHead } from '../renderers/ObserverHead';
 import { C } from '../renderers/palette';
+import {usePublishGuideExperiment, guideValue} from '../lib/guideExperiment';
+import {authoredGuideSnapshot} from '../lib/guideSnapshots';
+import {waveLesson} from '../lib/lessons/wave';
 
 const KIND = { cancellation: 'Complete cancellation', constructive: 'Constructive', destructive: 'Destructive', partial: 'Partial' };
 const PRESETS = [
@@ -66,6 +69,10 @@ export function WavePreview({ onOpen, onHelp }: { onOpen: (params: Params) => vo
   const tween = useRef(0);
   const clock = useSimClock(playing && !reducedMotion, 1, useOnScreen(ref));
   const p = params as unknown as WaveParams;
+  usePublishGuideExperiment(() => {
+    const snapshot = authoredGuideSnapshot(waveLesson, params, 'explore', 0, `Welcome-screen preview; ${playing && !reducedMotion ? 'playing' : 'paused'}; time ${guideValue(clock.t, 's')}. Only phase is adjustable here; amplitudes and frequency are fixed.`, null);
+    return {...snapshot, id: 'wave-preview', kind: 'preview', title: 'Wave interference (welcome preview)', controls: snapshot.controls.filter(c => c.id === 'range-phi').map(c => ({...c, id: 'preview-phi'}))};
+  });
 
   const [overdrive, setOverdriveView] = useState(isOverdrive);
   useEffect(() => onOverdrive(setOverdriveView), []);

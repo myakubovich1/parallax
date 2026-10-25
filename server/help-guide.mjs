@@ -7,6 +7,47 @@ Settings offers visual effects and motion preferences. Reduced motion pauses exp
 Errors: keep the question, review any visible error, retry when appropriate, try a clearer question, or use a preloaded experiment. Missing credentials, quota, unavailable models or network failures can block custom generation. You cannot inspect a user's provider account, secret key, deployment logs, or live billing. Never claim to fix server configuration. Explain only what the current visible error establishes.
 The help chat remains available while navigating. Closing it preserves this tab's conversation. Clear chat removes it. Known quick-help answers come from this guide and do not call a model; other questions are sent with recent chat and limited current-screen context to Gemma. The robot's guide is about this web app and its current lessons, not unrelated general chat. The interface calls it Ask Parallax.`;
 
+/** Accept a canonical reply or prose followed by a complete action envelope. Also repairs older tab history. */
+export function readGuidePayload(text) {
+  if (typeof text !== 'string' || !text.trim() || text.length > 14000)
+    throw new Error('Empty guide response');
+  const source = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '');
+  let data = source.startsWith('{') ? JSON.parse(source) : { answer: source, actions: [] };
+  if (!source.startsWith('{') && source.endsWith('}')) {
+    for (
+      let i = source.indexOf('{'), attempts = 0;
+      i >= 0 && attempts++ < 100;
+      i = source.indexOf('{', i + 1)
+    ) {
+      try {
+        const tail = JSON.parse(source.slice(i));
+        if (!tail || (!Object.hasOwn(tail, 'actions') && !Object.hasOwn(tail, 'answer'))) continue;
+        const prose = source
+          .slice(0, i)
+          .trim()
+          .replace(/```(?:json)?\s*$/i, '')
+          .trim();
+        data = { answer: typeof tail.answer === 'string' ? tail.answer : prose, actions: tail.actions };
+        break;
+      } catch {
+        /* Continue past braces in ordinary prose and math. */
+      }
+    }
+  }
+  if (
+    !data ||
+    typeof data.answer !== 'string' ||
+    !data.answer.trim() ||
+    data.answer.length > 5000 ||
+    /"(?:actions|answer)"\s*:/.test(data.answer)
+  )
+    throw new Error('Invalid guide answer');
+  return { answer: data.answer.trim(), actions: Array.isArray(data.actions) ? data.actions : [] };
+}
+
 export function localGuideAnswer(question, context) {
   const q = question.toLowerCase().replace(/[’']/g, "'");
   const example = { type: 'fill-question', question: 'Why do waves cancel each other out?' };
@@ -40,9 +81,15 @@ export function localGuideAnswer(question, context) {
       'Open Settings to choose your motion preference and turn visual effects on or off. Reduced motion starts experiments paused and limits decorative animation. You can still change values and use the available step controls.';
     actions = [{ type: 'open-settings' }];
   } else if (/what should i try first|what does this control change/.test(q) && context.controls.length) {
-    const c = context.controls[0];
-    answer = `Start with ${c.label}. It is currently ${c.value}. ${c.hint || 'Change it a little and compare the scene and readouts.'} Pin your starting values if you want a reference, then watch what changes. The highlight button points to the actual control.`;
-    actions = [{ type: 'highlight-control', controlId: c.id }];
+    const selected = context.controls.find((c) => c.id === context.focusedControlId);
+    if (/what does this control change/.test(q) && !selected) {
+      answer = `You’re exploring ${context.title}. Which control do you mean? ${context.controls.map((c) => `${c.label}: ${c.value}. ${c.hint}`).join('\n')} Select a control, then ask again for its explanation.`;
+    } else {
+      const c = selected ?? context.controls[0];
+      answer = `In ${context.title}, ${c.label} is currently ${c.value}. ${c.hint || 'Change it a little and compare the scene and readouts.'} ${c.available === false ? 'This control is not displayed in the current panel. Choose Explain & explore and open the Experiment panel to find it.' : 'Compare the scene and readouts as you change it. The highlight button points to this control.'}`;
+      actions =
+        c.available === false ? [{ type: 'show-modes' }] : [{ type: 'highlight-control', controlId: c.id }];
+    }
   } else if (/why couldn.?t.*open|why.*(?:error|fail)|couldn.?t.*open/.test(q) && context.error) {
     answer = `The screen reports: “${context.error}” Keep your question and follow that guidance. You can retry, rephrase the question, or explore a preloaded experiment while custom generation is unavailable. I can’t inspect your provider account or server settings from here.`;
     actions = [{ type: 'open-library' }, example];

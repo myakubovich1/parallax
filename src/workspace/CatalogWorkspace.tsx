@@ -7,6 +7,8 @@ import { MathText } from '../components/MathText';
 import { displayEquation, symbol } from '../lib/catalog/display';
 import { formatValue, type Formula } from '../lib/catalog/formulas';
 import type { LearningMode, Params } from '../lib/lessons/types';
+import {usePublishGuideExperiment} from '../lib/guideExperiment';
+import {catalogGuideSnapshot} from '../lib/guideSnapshots';
 
 interface Props {
   formula: Formula;
@@ -67,6 +69,7 @@ export function CatalogWorkspace({
   );
   const correct = target ? (f.calculate(target) > f.calculate(base) ? 'higher' : 'lower') : 'same';
   const active = f.params.find((d) => d.id === focused);
+  usePublishGuideExperiment(() => catalogGuideSnapshot(f, params, mode, reference, `Panel: ${tab}. Prediction ${revealed ? 'revealed' : 'not revealed'}. Scene: ${f.scene}; diagram can be schematic.`));
   return (
     <main id="main" className="generated-workspace catalog-workspace">
       <header className="generated-toolbar">

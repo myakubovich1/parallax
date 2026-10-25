@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
-import { localGuideAnswer } from '../../server/help-guide.mjs';
+import { localGuideAnswer, readGuidePayload } from '../../server/help-guide.mjs';
 import { useMediaQuery } from '../lib/clock';
 import {
   guideActionLabel,
@@ -23,8 +23,23 @@ function safeActions(value: unknown): GuideAction[] {
           (a.type === 'fill-question' && typeof a.question === 'string' && a.question.length <= 500) ||
           (a.type === 'highlight-control' &&
             typeof a.controlId === 'string' &&
-            /^(range|generated)-[a-zA-Z0-9_-]+$/.test(a.controlId))),
+            /^(range|generated|preview)-[a-zA-Z0-9_-]+$/.test(a.controlId))),
     );
+}
+function restoredMessage(message: { role: string; content: string; actions?: unknown }) {
+  if (message.role === 'user') return { content: redact(message.content) };
+  try {
+    const parsed = readGuidePayload(message.content);
+    return {
+      content: redact(parsed.answer),
+      actions: safeActions(parsed.actions.length ? parsed.actions : message.actions),
+    };
+  } catch {
+    return {
+      content: 'An earlier reply could not be restored. Ask again using the current experiment.',
+      actions: [],
+    };
+  }
 }
 function loadChat(): GuideMessage[] {
   try {
@@ -42,8 +57,7 @@ function loadChat(): GuideMessage[] {
           .map((m) => ({
             id: typeof m.id === 'string' ? m.id : crypto.randomUUID(),
             role: m.role,
-            content: redact(m.content),
-            actions: safeActions(m.actions),
+            ...restoredMessage(m),
             source: m.source === 'gemma' ? 'gemma' : 'guide',
           }))
       : [];
@@ -246,6 +260,22 @@ export function HelpAssistant({
                 ? 'Let’s get you unstuck'
                 : 'Let’s find something to explore'}
       </p>
+      {context.experiment && (
+        <details
+          className="guide-experiment-context"
+          onToggle={(event) => {
+            if (event.currentTarget.open) setContext(getContext());
+          }}
+        >
+          <summary>Using this experiment’s formula and values</summary>
+          <div>
+            <p className="guide-equation">{context.experiment.equation}</p>
+            <p>{context.controls.map((c) => `${c.label}: ${c.value}`).join(' · ')}</p>
+            <p>{context.readouts}</p>
+            <small>Refreshed when you send a question.</small>
+          </div>
+        </details>
+      )}
       <div
         ref={scroll}
         className="guide-conversation"

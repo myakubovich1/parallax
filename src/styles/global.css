@@ -275,6 +275,11 @@ kbd { font-family: var(--font-mono); font-size: 12px; border: 1px solid var(--ru
 .guide-header .row { flex-wrap: nowrap; gap: 0; }
 .guide-header .icon-btn { width: 44px; height: 44px; }
 .guide-context { flex: none; color: var(--ice); margin: 0; padding: 10px 16px; font-size: 12px; border-bottom: 1px solid var(--rule); overflow-wrap: anywhere; }
+.guide-experiment-context { flex: none; border-bottom: 1px solid var(--rule); font-size: 12px; overflow-wrap: anywhere; }
+.guide-experiment-context summary { padding: 8px 16px; color: var(--ice); cursor: pointer; }
+.guide-experiment-context > div { padding: 0 16px 10px; max-height: 160px; overflow-y: auto; }
+.guide-experiment-context p { margin: 4px 0 8px; white-space: pre-wrap; }
+.guide-equation { font-family: var(--font-mono); color: var(--lime); }
 .guide-conversation { flex: 1; min-height: 80px; overflow-y: auto; overscroll-behavior: contain; padding: 18px 16px; }
 .guide-welcome { padding: 16px 0; }
 .guide-welcome > span { color: var(--lime); font-size: 28px; }

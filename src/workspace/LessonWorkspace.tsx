@@ -10,6 +10,8 @@ import { EquationStrip } from './EquationStrip';
 import { FollowUpInput, type FollowUpReply } from './FollowUpInput';
 import { Inspector, type Tab } from './Inspector';
 import { SimulationStage } from './SimulationStage';
+import {usePublishGuideExperiment, guideValue} from '../lib/guideExperiment';
+import {authoredGuideSnapshot} from '../lib/guideSnapshots';
 
 interface Props {
   lesson: LessonSpec;
@@ -55,6 +57,8 @@ export function LessonWorkspace({ lesson, initialMode, initialParams, onExit, on
   const onScreen = useOnScreen(frameRef);
   const clock = useSimClock(playing, speed, onScreen);
   const ctx = { step };
+  usePublishGuideExperiment(() => authoredGuideSnapshot(lesson, params, mode, stepRef.current,
+    `${playing ? 'Playing' : 'Paused'}; simulated time ${guideValue(clock.t, 's')}; speed ${speed}×; iteration ${stepRef.current}; panel ${tab}; basics step ${basicsStep + 1}. ${halt ?? ''} ${consequence ?? ''}${beats ? ' Beats Easter egg is active: wave 2 temporarily uses f + 0.25 Hz. Readouts still describe the equal-frequency model.' : ''}`, reference));
 
   // Reduced motion: stop automatic playback; manual stepping remains.
   useEffect(() => {

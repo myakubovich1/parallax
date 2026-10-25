@@ -3,6 +3,24 @@ export interface GuideControl {
   label: string;
   value: string;
   hint: string;
+  symbol?: string;
+  available?: boolean;
+}
+export interface GuideExperiment {
+  id: string;
+  kind: 'authored' | 'catalog' | 'generated' | 'legacy' | 'preview';
+  equation: string;
+  terms: { symbol: string; label: string; meaning: string; value: string }[];
+  assumptions: string[];
+  state: string;
+  reference: string;
+}
+export interface GuideSnapshot extends GuideExperiment {
+  title: string;
+  mode: string;
+  summary: string;
+  controls: GuideControl[];
+  readouts: string;
 }
 export interface GuideContext {
   screen: 'entry' | 'lesson' | 'saved' | 'settings' | 'error';
@@ -13,6 +31,8 @@ export interface GuideContext {
   controls: GuideControl[];
   readouts: string;
   savedCount: number;
+  experiment?: GuideExperiment | null;
+  focusedControlId?: string | null;
 }
 export type GuideAction =
   | { type: 'fill-question'; question: string }
@@ -36,8 +56,11 @@ const clean = (text: string | null | undefined, limit = 500) =>
     .replace(/sk-[\w-]{12,}|AIza[\w-]{25,}/g, '[redacted key]')
     .trim()
     .slice(0, limit);
-export function readGuideContext(savedCount: number): GuideContext {
-  const main = document.getElementById('main');
+export function readGuideContext(
+  savedCount: number,
+  snapshot: GuideSnapshot | null,
+  focusedId: string | null,
+): GuideContext {
   const modal = document.querySelector<HTMLDialogElement>('dialog.dialog[open]');
   const modalTitle = modal?.querySelector('.frame-title')?.textContent?.toLowerCase() ?? '';
   const error = clean(document.querySelector('#concept-error, .gen-status.failed')?.textContent);
@@ -47,36 +70,51 @@ export function readGuideContext(savedCount: number): GuideContext {
       ? 'settings'
       : error
         ? 'error'
-        : main?.classList.contains('entry')
-          ? 'entry'
-          : 'lesson';
-  const controls =
-    screen === 'lesson'
-      ? [...(main?.querySelectorAll<HTMLInputElement>('input[type=range]') ?? [])]
-          .slice(0, 10)
-          .map((input) => {
-            const label = main?.querySelector(`label[for="${CSS.escape(input.id)}"]`);
-            const hintId = input.getAttribute('aria-describedby');
-            return {
-              id: input.id,
-              label: clean(label?.textContent || input.getAttribute('aria-label') || input.id, 100),
-              value: clean(input.getAttribute('aria-valuetext') || input.value, 80),
-              hint: clean(hintId ? document.getElementById(hintId)?.textContent : '', 240),
-            };
-          })
-      : [];
+        : snapshot && snapshot.kind !== 'preview'
+          ? 'lesson'
+          : 'entry';
+  const controls = (snapshot?.controls ?? []).slice(0, 10).map((control) => {
+    const input = document.getElementById(control.id);
+    return {
+      ...control,
+      label: clean(control.label, 100),
+      value: clean(control.value, 80),
+      hint: clean(control.hint, 240),
+      available: Boolean(input && input.getClientRects().length && !input.closest('[inert]')),
+    };
+  });
+  const experiment: GuideExperiment | null = snapshot
+    ? {
+        id: clean(snapshot.id, 100),
+        kind: snapshot.kind,
+        equation: clean(snapshot.equation, 1800),
+        terms: snapshot.terms
+          .slice(0, 24)
+          .map((term) => ({
+            symbol: clean(term.symbol, 60),
+            label: clean(term.label, 100),
+            meaning: clean(term.meaning, 300),
+            value: clean(term.value, 100),
+          })),
+        assumptions: snapshot.assumptions.slice(0, 8).map((line) => clean(line, 300)),
+        state: clean(snapshot.state, 1000),
+        reference: clean(snapshot.reference, 700),
+      }
+    : null;
   return {
     screen,
-    title: clean(main?.querySelector('h1')?.textContent, 160),
-    mode: clean(main?.querySelector<HTMLInputElement>('.mode-selector input:checked')?.value, 30),
-    summary: clean(main?.querySelector('.catalog-takeaway, .experiment-takeaway, .lead')?.textContent),
+    title: clean(snapshot?.title, 160),
+    mode: clean(
+      snapshot?.mode || document.querySelector<HTMLInputElement>('.mode-selector input:checked')?.value,
+      30,
+    ),
+    summary: clean(snapshot?.summary, 1000),
     error,
     controls,
-    readouts: clean(
-      main?.querySelector('.experiment-readouts, .readouts, .catalog-comparison')?.textContent,
-      500,
-    ),
+    readouts: clean(snapshot?.readouts, 1400),
     savedCount,
+    experiment,
+    focusedControlId: controls.some((c) => c.id === focusedId) ? focusedId : null,
   };
 }
 export function guideSuggestions(context: GuideContext): string[] {
