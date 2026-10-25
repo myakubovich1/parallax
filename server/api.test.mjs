@@ -132,3 +132,29 @@ test('unsupported provider and model are rejected before any network request', a
     assert.equal((await post(base, request)).status, 503);
   }
 });
+
+test('serverless pre-parsed body and x-forwarded-host are accepted', async () => {
+  const api = createApi({
+    getConfig: () => ({ PARALLAX_PROVIDER: 'openai', PARALLAX_API_KEY: 'test-only-placeholder' }),
+    fetchImpl: async () => Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(lesson) } }] }),
+  });
+  let status = 0;
+  let payload = '';
+  const req = {
+    url: '/api/generate',
+    method: 'POST',
+    headers: { 'content-type': 'application/json', host: 'internal.vercel.app', 'x-forwarded-host': 'parallax.vercel.app', origin: 'https://parallax.vercel.app' },
+    body: request,
+    socket: {},
+  };
+  const res = {
+    setHeader() {},
+    writeHead(code) { status = code; return this; },
+    end(chunk = '') { payload = chunk; this.writableEnded = true; },
+    on() {},
+    off() {},
+  };
+  await api(req, res);
+  assert.equal(status, 200);
+  assert.deepEqual(JSON.parse(payload), { lesson });
+});
