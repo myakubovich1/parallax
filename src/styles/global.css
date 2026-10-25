@@ -882,3 +882,19 @@ input[type='range']:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(
  .preview-frame { box-shadow: none; }
  .entry-foot { margin-top: 32px; }
 }
+
+.generated-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 16px; }
+.generated-grid > section, .generated-explanation { min-width: 0; }
+.generated-stage { overflow-x: auto; overflow-y: hidden; }
+.generated-stage iframe { display: block; min-width: 640px; }
+.generated-explanation { overflow-wrap: anywhere; }
+.generated-param output { font-family: var(--font-mono); }
+@media (max-width: 600px) {
+  .generated-workspace { padding: 16px; }
+  .generated-toolbar { gap: 8px; }
+  .generated-toolbar .btn { padding: 0 10px; font-size: 12px; }
+  .generated-stage { height: 400px; }
+  .generated-grid { gap: 16px; }
+  .saved-item { flex-wrap: wrap; }
+  .saved-info { min-width: 0; overflow-wrap: anywhere; }
+}

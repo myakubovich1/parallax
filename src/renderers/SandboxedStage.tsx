@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { SVG_LABEL_LAYOUT } from './svgLabelLayout';
 import type { Params } from '../lib/lessons/types';
 
 /**
@@ -34,7 +35,7 @@ export function SandboxedStage({ html, params, title, onMessage }: { html: strin
       title={title}
       sandbox="allow-scripts"
       referrerPolicy="no-referrer"
-      srcDoc={`<!doctype html><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#101310;color:#e0ebe0;font:14px system-ui}*{box-sizing:border-box}body>svg,body>canvas{display:block;max-width:100%;max-height:100%}</style>${html}`}
+      srcDoc={`<!doctype html><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;width:100%;height:100%;overflow:auto;background:#101310;color:#e0ebe0;font:14px system-ui}*{box-sizing:border-box}body>svg,body>canvas{display:block;max-width:100%;max-height:100%}</style>${html}<script>${SVG_LABEL_LAYOUT}</script>`}
       className="sandboxed-stage"
     />
   );

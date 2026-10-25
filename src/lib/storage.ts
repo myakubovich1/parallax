@@ -1,13 +1,18 @@
-import type { ConceptId, LearningMode, Params } from './lessons/types';
+import { validateLesson } from '../../server/lesson.mjs';
+import type { ConceptId, GeneratedLessonSpec, LearningMode, Params } from './lessons/types';
 
-export interface SavedExperiment {
+interface SavedBase {
   id: string;
-  conceptId: ConceptId;
   title: string;
   mode: LearningMode;
   params: Params;
   savedAt: number;
 }
+
+export type SavedExperiment = SavedBase & (
+  { conceptId: ConceptId; generatedLesson?: never }
+  | { conceptId?: never; generatedLesson: GeneratedLessonSpec }
+);
 
 const KEY = 'parallax.saved.v1';
 
@@ -15,7 +20,13 @@ export function loadSaved(): SavedExperiment[] {
   try {
     const raw = localStorage.getItem(KEY);
     const list = raw ? (JSON.parse(raw) as SavedExperiment[]) : [];
-    return Array.isArray(list) ? list.filter((e) => e && typeof e.conceptId === 'string' && e.params) : [];
+    return Array.isArray(list) ? list.filter(e => {
+      if (!e || typeof e.id !== 'string' || !e.params || !Object.values(e.params).every(v => typeof v === 'number' && Number.isFinite(v))) return false;
+      if (e.generatedLesson) {
+        try { validateLesson(e.generatedLesson); return true; } catch { return false; }
+      }
+      return typeof e.conceptId === 'string';
+    }) : [];
   } catch {
     return [];
   }

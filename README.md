@@ -29,7 +29,7 @@ Parallax ships three hand-written, deterministic lessons, and `src/lib/generatio
 | Gravitational attraction | `F = G m₁ m₂ / r²`, SI units, lead spheres drawn to scale | SVG: draggable bodies, log-scaled force arrows, equipotential contours |
 | Gradient descent | `L(w) = (w − 3)²`, `w_next = w − η·2(w − 3)` | SVG: loss curve, tangent, step track, halts at \|w − 3\| > 12 |
 
-Other prompts are sent to the same-origin `/api/generate` endpoint. The server calls Gemini by default, validates the structured lesson, and returns an equation, explanation, parameter controls and an interactive visualization. AI-generated content can be incorrect; each lesson displays its assumptions and limitations. Custom lessons are temporary and are not included in Saved experiments.
+Other prompts are sent to the same-origin `/api/generate` endpoint. The server calls Gemini by default, validates the structured lesson, and returns an equation, explanation, parameter controls and an interactive visualization. AI-generated content can be incorrect; each lesson displays its assumptions and limitations. Use Save experiment to keep a generated lesson and its current slider settings in Saved experiments. Saved lessons reopen without another API call, including after a browser refresh; storage is local to that browser.
 
 ## Secure live generation
 
