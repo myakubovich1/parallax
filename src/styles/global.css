@@ -1089,3 +1089,60 @@ input[type='range']:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(
   .preset-tile-label { display: flex; flex-direction: column; font-size: 15px; letter-spacing: 0.02em; line-height: 1.05; }
   .preview-frame .serial { display: none; }
 }
+
+/* ── Easter eggs ─────────────────────────────────────────────────────────── */
+.egg-caption {
+  position: fixed;
+  left: 50%;
+  top: calc(var(--topbar-h) + 12px);
+  z-index: 95;
+  display: grid;
+  gap: 2px;
+  max-width: min(520px, calc(100vw - 32px));
+  padding: 10px 16px;
+  background: rgba(8, 13, 11, 0.95);
+  border: 1px solid var(--lime);
+  border-radius: 2px;
+  font-size: 14px;
+  line-height: 1.45;
+  transform: translate(-50%, -8px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease-out, transform 200ms ease-out;
+}
+.egg-caption.show { opacity: 1; transform: translate(-50%, 0); }
+.egg-caption:empty { display: none; }
+.egg-kicker { font-family: 'VT323', var(--font-mono); font-size: 17px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--lime); }
+[data-effects='on'] .egg-caption.show { box-shadow: 0 0 24px -8px rgba(195, 248, 107, 0.6); }
+.egg-count { margin: 0; color: var(--lime); font-family: var(--font-mono); }
+
+/* Phosphor overdrive (Konami code): the dithertone poster, turned up. */
+[data-overdrive='on'] .app > :not(.egg-caption):not(.toast) { filter: sepia(0.5) hue-rotate(36deg) saturate(2) brightness(1.3) contrast(1.12); }
+[data-overdrive='on'] body { text-shadow: 0 0 6px rgba(195, 248, 107, 0.45); }
+[data-overdrive='on'] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.3) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at center, transparent 60%, rgba(0, 0, 0, 0.55) 100%);
+}
+/* Phosphor bloom over everything, as on the poster's glowing screen. */
+[data-overdrive='on'] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 199;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  background: radial-gradient(ellipse at 50% 45%, rgba(195, 248, 107, 0.16), rgba(195, 248, 107, 0.04) 70%);
+}
+
+/* "parallax" typed: the mark's two sight lines redraw and converge. */
+[data-logo-egg='on'] .mark path { stroke-dasharray: 22; animation: mark-draw 900ms ease-out both; }
+[data-logo-egg='on'] .mark path:nth-of-type(2) { animation-delay: 120ms; }
+[data-logo-egg='on'] .mark circle { transform-origin: 16px 24.5px; animation: mark-dot 500ms 700ms ease-out both; }
+@keyframes mark-draw { from { stroke-dashoffset: 22; } to { stroke-dashoffset: 0; } }
+@keyframes mark-dot { 0% { transform: scale(0.4); } 60% { transform: scale(1.6); } 100% { transform: scale(1); } }

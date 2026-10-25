@@ -3,6 +3,7 @@ import { usePageVisible } from '../lib/clock';
 import { claimFlight, fly, leaveFlight, observerParams } from '../lib/observerFlight';
 import { y1, y2, yTotal } from '../lib/physics/wave';
 import { useSettings } from '../lib/settings';
+import { EGG_FAST, onRobotCue, revealEgg } from '../lib/eggs';
 import { HEAD_BOX, buildField, drawHead, headGeometry, type Field, type Geometry, type Rect } from './ObserverHead';
 import { C } from './palette';
 
@@ -13,6 +14,9 @@ const CX = -HEAD_BOX.u0 * S;
 const CY = -HEAD_BOX.v0 * S;
 const PARALLAX = 3.4; // exaggerated so a 34 px head visibly turns toward the cursor
 const FRAME_MS = 1000 / 30;
+/** Sleepy egg: idle this long on a lesson page and the docked head nods off. */
+const SLEEP_MS = EGG_FAST ? 3000 : 120000;
+const NOD_MS = 650;
 
 const geom = (yaw: number, pitch: number): Geometry => headGeometry(SIZE, SIZE, S, CX, CY, yaw, pitch, { pad: 1, swatches: false, parallax: PARALLAX });
 
@@ -49,6 +53,7 @@ export function MiniObserver() {
   const { reducedMotion, effects } = useSettings();
   const visible = usePageVisible();
   const [landing, setLanding] = useState(false);
+  const mood = useRef({ lastInput: performance.now(), asleep: false, nodAt: -1e9 });
 
   const draw = (t: number) => {
     const canvas = ref.current;
@@ -60,13 +65,31 @@ export function MiniObserver() {
       field.current = { f: buildField(geom(0, 0), dpr, CELL), dpr };
     }
     const ctx = canvas.getContext('2d')!;
-    const { yaw, pitch } = look.current;
+    const m = mood.current;
+    const nod = performance.now() - m.nodAt;
+    const yaw = m.asleep ? 0 : look.current.yaw;
+    const pitch = m.asleep ? 0.5 : look.current.pitch + (nod < NOD_MS ? 0.8 * Math.sin((Math.PI * nod) / NOD_MS) : 0);
     const g = geom(yaw, pitch);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, SIZE, SIZE);
     // Brighter, cell-filling dots: at 34 px a sparse dither reads as a dark blob.
-    drawHead(ctx, g, field.current.f, dpr, yaw, pitch, 1.75);
+    drawHead(ctx, g, field.current.f, dpr, yaw, pitch, m.asleep ? 1.1 : 1.75);
     const p = observerParams;
+    if (m.asleep) {
+      // Eyes flat and dim, a pixel "z" drifting up.
+      ctx.globalAlpha = 0.45;
+      screen(ctx, g.eyes[0], g, () => 0, C.lime);
+      screen(ctx, g.eyes[1], g, () => 0, C.ice);
+      screen(ctx, g.mouth, g, () => 0, C.text);
+      ctx.globalAlpha = 1;
+      const k = (t * 0.6) % 1;
+      ctx.fillStyle = C.lime;
+      ctx.globalAlpha = 1 - k;
+      ctx.font = `${7 + k * 3}px 'VT323', monospace`;
+      ctx.fillText('z', SIZE * 0.68 + k * 5, SIZE * 0.32 - k * 9);
+      ctx.globalAlpha = 1;
+      return;
+    }
     screen(ctx, g.eyes[0], g, (x) => y1(x, t, p), C.lime);
     screen(ctx, g.eyes[1], g, (x) => y2(x, t, p), C.ice);
     screen(ctx, g.mouth, g, (x) => yTotal(x, t, p), C.text);
@@ -92,6 +115,37 @@ export function MiniObserver() {
   }, []);
   const reducedMotionRef = useRef(reducedMotion);
   reducedMotionRef.current = reducedMotion;
+
+  // Sleepy egg: any input wakes it with a startled twitch; it also nods on cue.
+  useEffect(() => {
+    const wake = () => {
+      const m = mood.current;
+      m.lastInput = performance.now();
+      if (!m.asleep) return;
+      m.asleep = false;
+      look.current.pitch = -0.9;
+      revealEgg('sleepy', 'Zzz… oh! The observer was just resting its eyes.');
+      draw(performance.now() / 1000);
+    };
+    const events = ['pointermove', 'pointerdown', 'keydown', 'wheel', 'scroll'] as const;
+    events.forEach((ev) => window.addEventListener(ev, wake, { passive: true }));
+    const check = window.setInterval(() => {
+      const m = mood.current;
+      if (!m.asleep && performance.now() - m.lastInput > SLEEP_MS) {
+        m.asleep = true;
+        draw(performance.now() / 1000);
+      }
+    }, 500);
+    const stopCue = onRobotCue((cue) => {
+      if (cue === 'nod') mood.current.nodAt = performance.now();
+    });
+    return () => {
+      events.forEach((ev) => window.removeEventListener(ev, wake));
+      clearInterval(check);
+      stopCue();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (reducedMotion) {

@@ -16,6 +16,7 @@ Browser checks can use system Chromium with `PARALLAX_CHROMIUM_PATH=/usr/bin/chr
 ```bash
 npm run verify       # 36 end-to-end interaction checks (Playwright)
 node verify/generation.mjs # custom equation UI checks (mocked provider)
+node verify/eggs.mjs       # triggers all 12 easter eggs (no spoilers here; read the script)
 node verify/experiments.mjs # rich lessons: units, modes, predictions, comparisons and visual fallback
 node verify/background.mjs # shared background, hover, motion preferences and responsive layouts
 npm run screens      # desktop / tablet / mobile screenshots → verify/screens/

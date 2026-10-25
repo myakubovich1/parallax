@@ -6,6 +6,7 @@ import { fixed } from '../lib/format';
 import type { Params } from '../lib/lessons/types';
 import { WAVELENGTH_M, classify, phaseOffsetMeters, resultantAmplitude, yTotal, y1, y2, type WaveParams } from '../lib/physics/wave';
 import { useSettings } from '../lib/settings';
+import { cueRobot, isOverdrive, onOverdrive } from '../lib/eggs';
 import { BAYER, ObserverHead } from '../renderers/ObserverHead';
 import { C } from '../renderers/palette';
 
@@ -66,12 +67,24 @@ export function WavePreview({ onOpen }: { onOpen: (params: Params) => void }) {
   const clock = useSimClock(playing && !reducedMotion, 1, useOnScreen(ref));
   const p = params as unknown as WaveParams;
 
+  const [overdrive, setOverdriveView] = useState(isOverdrive);
+  useEffect(() => onOverdrive(setOverdriveView), []);
+  /** Resonance egg: alternate Constructive and Cancelled six times in a row. */
+  const presetHistory = useRef<{ phi: number; t: number }[]>([]);
+
   const setPhi = (phi: number) => setParams((x) => ({ ...x, phi }));
   const stopTween = () => cancelAnimationFrame(tween.current);
   useEffect(() => stopTween, []);
 
   /** Presets animate the slider so the change reads as a cause, not a jump. */
   const goTo = (target: number) => {
+    const now = performance.now();
+    const h = [...presetHistory.current.filter((e) => now - e.t < 8000), { phi: target, t: now }].slice(-6);
+    presetHistory.current = h;
+    if (h.length === 6 && h.every((e, i) => (e.phi === 0 || e.phi === 180) && (i === 0 || e.phi !== h[i - 1].phi))) {
+      presetHistory.current = [];
+      cueRobot('resonance');
+    }
     stopTween();
     const from = p.phi;
     if (reducedMotion || from === target) return setPhi(target);
@@ -85,7 +98,7 @@ export function WavePreview({ onOpen }: { onOpen: (params: Params) => void }) {
     tween.current = requestAnimationFrame(step);
   };
 
-  const serial = `SERIAL /λ${fixed(WAVELENGTH_M)} /f${fixed(p.f)} /φ${fixed(p.phi, 0)} · OBSERVER OU-01`;
+  const serial = overdrive ? 'SERIAL /MODE OVERDRIVE · OBSERVER OU-01' : `SERIAL /λ${fixed(WAVELENGTH_M)} /f${fixed(p.f)} /φ${fixed(p.phi, 0)} · OBSERVER OU-01`;
 
   return (
     <div ref={ref} className="preview">

@@ -1,3 +1,4 @@
+import { EGGS, foundEggs } from '../lib/eggs';
 import { useSettings, type MotionPref } from '../lib/settings';
 import { Dialog } from './Dialog';
 
@@ -36,6 +37,9 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           Example lessons run in your browser. Custom questions go to the server’s configured AI provider. Saved experiments and preferences stay in this browser.
         </p>
       </div>
+      {foundEggs().length > 0 && (
+        <p className="muted small egg-count">◆ Easter eggs found: {foundEggs().length} of {Object.keys(EGGS).length}</p>
+      )}
     </Dialog>
   );
 }
