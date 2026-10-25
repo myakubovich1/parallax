@@ -13,7 +13,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
       <div className="setting">
         <div>
           <p className="setting-name" id="fx-label">Visual effects</p>
-          <p className="muted small" id="fx-desc">Grain, scanlines and glow on scientific visuals. Values and labels are unaffected.</p>
+          <p className="muted small" id="fx-desc">Dithered backgrounds, hover depth, scanlines and phosphor glow across the app.</p>
         </div>
         <button role="switch" aria-checked={effects} aria-labelledby="fx-label" aria-describedby="fx-desc" className={`switch ${effects ? 'on' : ''}`} onClick={() => setEffects(!effects)}>
           <span className="switch-knob" />

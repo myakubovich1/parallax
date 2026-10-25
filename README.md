@@ -16,6 +16,7 @@ Browser checks can use system Chromium with `PARALLAX_CHROMIUM_PATH=/usr/bin/chr
 ```bash
 npm run verify       # 36 end-to-end interaction checks (Playwright)
 node verify/generation.mjs # custom equation UI checks (mocked provider)
+node verify/background.mjs # shared background, hover, motion preferences and responsive layouts
 npm run screens      # desktop / tablet / mobile screenshots → verify/screens/
 ```
 
@@ -67,3 +68,7 @@ Development-only QA hooks: `?demo-slow` shows the in-progress state, and `?demo-
 - `src/workspace/*`: `LessonWorkspace`, `SimulationStage`, `EquationStrip`, `ParameterControl`, `PredictionChallenge`, `FollowUpInput`, `Inspector`.
 
 Saved experiments and settings are stored in `localStorage`, so they live in this browser only.
+
+## Phosphor environment
+
+Every screen shares an ordered-dither canvas with green and ice-blue contour fields. On pointer hover, nearby pixels ease upward and brighten into a raised surface. The canvas is decorative and never intercepts controls; it renders only while the pointer response is settling, stops in hidden tabs, and caps its grain count on larger displays. Touch and reduced-motion users get a static field. Settings → Visual effects disables the background and surface treatments throughout the app.
