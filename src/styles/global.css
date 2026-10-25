@@ -242,6 +242,20 @@ kbd { font-family: var(--font-mono); font-size: 12px; border: 1px solid var(--ru
 .entry-form { display: grid; gap: 16px; border: 1px solid var(--control); background: #0d1511a6; padding: 0 20px 20px; }
 .input-strip { display: flex; justify-content: space-between; padding: 12px 20px; margin: 0 -20px; border-bottom: 1px solid var(--rule); color: var(--violet); background: #c3c0f207; font-size: 11px; }
 .entry-form .field-label { font-family: var(--font-body); font-size: 14px; }
+.concept-label-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.concept-label-row .field-label { flex: 1; min-width: 0; margin-bottom: 0; }
+.concept-help-button { flex: none; width: 44px; height: 44px; color: var(--violet); }
+.concept-help-button[aria-expanded='true'] { color: var(--lime); border-color: var(--lime); background: var(--lime-dim); }
+.concept-help { padding: 16px; margin-bottom: 16px; border: 1px solid var(--rule); border-left: 2px solid var(--lime); background: linear-gradient(135deg, #b2dc6d0a, #9bd4d508); font-size: 14px; line-height: 1.6; }
+.concept-help-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.concept-help-heading .icon-btn { flex: none; width: 44px; height: 44px; }
+.concept-help h3 { font-family: var(--font-body); font-size: 16px; line-height: 1.4; margin: 0 0 8px; }
+.concept-help-heading h3 { margin: 0; }
+.concept-help p { margin: 0 0 12px; }
+.concept-help-examples { margin: 0 0 16px; padding-left: 20px; color: var(--ice); }
+.concept-help-examples li + li { margin-top: 4px; }
+.concept-help .concept-help-mode { margin-bottom: 0; color: var(--text-2); }
+.concept-help-mode strong { color: var(--text); font-weight: 500; }
 .entry-form .mode-selector .field-label { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-2); }
 .entry-form .mode-desc { display: none; }
 .entry-form .mode-options { gap: 0; border: 1px solid var(--control); }
