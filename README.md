@@ -17,6 +17,7 @@ Browser checks can use system Chromium with `PARALLAX_CHROMIUM_PATH=/usr/bin/chr
 npm run verify       # 36 end-to-end interaction checks (Playwright)
 node verify/generation.mjs # custom equation UI checks (mocked provider)
 node verify/catalog.mjs    # all 47 new models, limits, aliases, save and zero API calls (dev server)
+node verify/catalog-quality.mjs # canvas label bounds, collisions, comparison, keyboard and prediction
 node verify/eggs.mjs       # triggers all 12 easter eggs (no spoilers here; read the script)
 node verify/experiments.mjs # rich lessons: units, modes, predictions, comparisons and visual fallback
 node verify/background.mjs # shared background, hover, motion preferences and responsive layouts
@@ -43,7 +44,7 @@ Parallax ships **50 authored, deterministic experiments**: 47 common formulas pl
 
 The matcher accepts common notation and equivalent product forms, for example `kinetic energy`, `½mv²`, `1/2*m*v^2`, `0.5mv**2`, and `E = mv²/2`. Recognition uses a bounded arithmetic parser and authored aliases; it is not a general symbolic theorem prover. Requests outside the library continue to the selected AI provider.
 
-Each new model includes a schematic SVG diagram, an exact numerical response curve, live readouts, adjustable parameters, assumptions, and Save/reopen support. Motion-based models have pause/reset controls; static relationships stay static. Animation speed and schematic dimensions are illustrative. Quick, Explore and Basics provide different explanation lengths.
+Each new model has an authored canvas demonstration with stippled bodies, measurements and annotations, plus an optional numerical response graph. Scenes are designed for their particular formula: motion trails, force vectors, impulse areas, combined charge-potential contours, spring deformation, circuit charge separation, gas particles, fluid flow, optical rays or geometric areas. The workspace includes linked variables, diagram dragging/keyboard input, presets, reference comparison, a computed prediction/reveal, live readouts and Save/reopen support. Motion-based models have play/pause, speed and reset controls; static relationships stay static. Harmonic displacement, RC discharge and cooling can animate the time parameter so readouts remain connected. Animation speed and schematic dimensions are illustrative. Quick, Explore and Basics provide different explanation lengths.
 
 The original three lessons retain their richer custom renderers, predictions and follow-ups:
 
@@ -88,7 +89,7 @@ npm start             # Node serves dist and /api on 127.0.0.1:3000
 
 Production requires the Node server, rather than a static-only host such as GitHub Pages or `vite preview`. For public hosting, use a reverse proxy with HTTPS and access controls; the endpoint consumes the server owner's API quota. The server includes per-process request and concurrency limits. Configure `HOST` and `PORT` for your host as needed. Keep secrets in the host's secret settings, outside the build output.
 
-Without a configured key, the three authored lessons still work; other prompts display a setup error. `GET /api/status` reports the selected provider, model, whether its key is configured, the required key variable, whether the provider came from an explicit environment setting or the default, and the deployment environment/commit when Vercel supplies them. It never returns key values and is not cached. A live provider call is needed to verify key validity and model access.
+Without a configured key, all 50 preloaded experiments still work; other prompts display a setup error. `GET /api/status` reports the selected provider, model, whether its key is configured, the required key variable, whether the provider came from an explicit environment setting or the default, and the deployment environment/commit when Vercel supplies them. It never returns key values and is not cached. A live provider call is needed to verify key validity and model access.
 
 Vercel does not import `.env.example` or your ignored `.env.local` from GitHub. Add variables to the actual Vercel project and the environment you are visiting: Production for its production domain, Preview for branch deployments. Updating variables does not change an existing deployment; redeploy to apply them. After deployment, open `/api/status` on the exact domain you are using and check `provider: "openai"`, the intended `model`, `configured: true`, and the expected Git commit. If a deployment still reports Gemini, check for an explicit `PARALLAX_PROVIDER=gemini`, a Preview branch override, or an older deployment URL. Keep API keys server-only; never use a `VITE_` prefix.
 
@@ -96,7 +97,7 @@ Development-only QA hooks: `?demo-slow` shows the in-progress state, and `?demo-
 
 ## Architecture
 
-- `src/lib/catalog/*`: 47 formula definitions, bounded notation matching and calculation tests; `CatalogStage.tsx` provides shared authored visual families.
+- `src/lib/catalog/*`: 47 formula definitions, bounded notation matching and calculation tests; `CatalogStage.tsx` provides playback and graph controls; `src/renderers/catalog/*` contains the formula-specific scene painters. Canvas rendering uses the shared visibility-aware clock and suspends playback off-screen or in a hidden tab.
 - `src/lib/physics/*`: pure calculations with no UI code, tested in `physics.test.ts`.
 - `src/lib/lessons/*`: concept metadata, equation terms, parameters, steps, predictions and follow-ups (`LessonSpec`).
 - `src/lib/generation/adapter.ts`: the `GenerationAdapter` interface. `liveAdapter.ts` uses the same-origin API for custom lessons, with an `AbortSignal` and typed errors; the API key stays in `server/api.mjs`.

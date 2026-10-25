@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const base = (process.argv[2] ?? 'http://localhost:5199') + '/?eggs-fast';
 const out = fileURLToPath(new URL('./screens/', import.meta.url));
-const browser = await chromium.launch();
+const browser = await chromium.launch({ executablePath: process.env.PARALLAX_CHROMIUM_PATH || undefined });
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));

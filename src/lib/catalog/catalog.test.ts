@@ -71,6 +71,7 @@ describe('authored formula library', () => {
         expect(d.step).toBeGreaterThan(0);
         expect(d.default).toBeGreaterThanOrEqual(d.min);
         expect(d.default).toBeLessThanOrEqual(d.max);
+      expect(Math.abs((d.default-d.min)/d.step-Math.round((d.default-d.min)/d.step))).toBeLessThan(1e-7);
       }
     }
   });

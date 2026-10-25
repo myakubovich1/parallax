@@ -72,7 +72,7 @@ try {
       await page.getByRole('button', { name: 'Reset values' }).click();
       await page.evaluate(() => document.fonts.ready);
       await page.evaluate(() => window.scrollTo(0, 0));
-      await page.waitForTimeout(50);
+      await page.waitForFunction(()=>document.querySelectorAll('body > canvas').length===0);
       await page.screenshot({ path: `verify/screens/library-${f.id}.png`, fullPage: true });
     }
     await page.getByRole('button', { name: 'Back to start' }).click();
@@ -91,9 +91,9 @@ try {
   await page.getByRole('button', { name: 'Open', exact: true }).click();
   assert.equal(await page.locator('#generated-v').inputValue(), '8');
   await page.getByRole('button', { name: 'Pause animation', exact: true }).click();
-  const paused = await page.locator('.catalog-visual svg').innerHTML();
+  const paused = await page.locator('.catalog-canvas').evaluate(canvas=>canvas.toDataURL());
   await page.waitForTimeout(100);
-  assert.equal(await page.locator('.catalog-visual svg').innerHTML(), paused);
+  assert.equal(await page.locator('.catalog-canvas').evaluate(canvas=>canvas.toDataURL()), paused);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: 'verify/screens/library-mobile.png', fullPage: true });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);

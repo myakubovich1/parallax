@@ -7,8 +7,8 @@ import { EggCaption } from './components/EggCaption';
 import { cueRobot, isMassEnergy, listenForKeyEggs, revealEgg, setOverdrive } from './lib/eggs';
 import { GenerationError } from './lib/generation/adapter';
 import { liveAdapter } from './lib/generation/liveAdapter';
-import { CatalogStage } from './renderers/CatalogStage';
-import { FORMULA_BY_ID, formulaLesson } from './lib/catalog/formulas';
+import { CatalogWorkspace } from './workspace/CatalogWorkspace';
+import { FORMULA_BY_ID } from './lib/catalog/formulas';
 import { GeneratedWorkspace } from './workspace/GeneratedWorkspace';
 import { LESSON_BY_ID, defaultParams } from './lib/lessons/registry';
 import type { ConceptId, GeneratedLessonSpec, LearningMode, LessonSpec, Params } from './lib/lessons/types';
@@ -194,8 +194,8 @@ export default function App() {
           onOpenLesson={(id, params) => { setGen({ status: 'idle' }); openLesson(id, mode, params); }}
         />
       ) : screen.kind === 'preloaded' ? (
-        <GeneratedWorkspace key={screen.key} lesson={formulaLesson(FORMULA_BY_ID[screen.id], screen.mode)} initialMode={screen.mode} initialParams={screen.params} label="Preloaded experiment · Authored model · No API call" stage={params => <CatalogStage formula={FORMULA_BY_ID[screen.id]} params={params}/>} onExit={() => goEntry()} onSave={params => {
-          const entry: SavedExperiment = { id: crypto.randomUUID(), formulaId: screen.id, title: FORMULA_BY_ID[screen.id].title, mode: screen.mode, params, savedAt: Date.now() };
+        <CatalogWorkspace key={screen.key} formula={FORMULA_BY_ID[screen.id]} initialMode={screen.mode} initialParams={screen.params} onExit={() => goEntry()} onSave={(params, savedMode) => {
+          const entry: SavedExperiment = { id: crypto.randomUUID(), formulaId: screen.id, title: FORMULA_BY_ID[screen.id].title, mode: savedMode, params, savedAt: Date.now() };
           const ok = persist([entry, ...saved].slice(0, 50));
           setToast(ok ? 'Saved to this browser. Find it in Saved experiments.' : 'Couldn’t save: browser storage is full or unavailable.');
         }}/>

@@ -305,7 +305,7 @@ export const FORMULAS: Formula[] = [
     's',
     [
       p('r', 'Orbital radius', '10⁶ m', 7, 40, 10, 1),
-      p('M', 'Central mass', '10²⁴ kg', 1, 10, 5.97),
+      p('M', 'Central mass', '10²⁴ kg', 1, 10, 5.97, 0.01),
     ],
     (p) => 2 * Math.PI * Math.sqrt((p.r * 1e6) ** 3 / (6.6743e-11 * p.M * 1e24)),
     'Larger orbits take longer: period grows as radius to the power 3/2. A more massive central body shortens the period.',
