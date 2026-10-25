@@ -12,7 +12,7 @@ import { loadSaved, writeSaved, type SavedExperiment } from './lib/storage';
 import { EntryScreen, type GenState } from './screens/EntryScreen';
 import { LessonWorkspace } from './workspace/LessonWorkspace';
 
-type Screen = { kind: 'generated'; lesson: GeneratedLessonSpec } | { kind: 'entry' } | { kind: 'lesson'; lesson: LessonSpec; mode: LearningMode; params: Params; key: number };
+type Screen = { kind: 'generated'; lesson: GeneratedLessonSpec; mode: LearningMode; params?: Params; key: number } | { kind: 'entry' } | { kind: 'lesson'; lesson: LessonSpec; mode: LearningMode; params: Params; key: number };
 
 const adapter = liveAdapter;
 /** Progress UI appears only if a request takes longer than this, so instant demo lookups don't flash. */
@@ -91,7 +91,7 @@ export default function App() {
         openLesson(res.lesson.id, mode);
       } else if (res.status === 'generated') {
         setGen({ status: 'idle' });
-        setScreen({ kind: 'generated', lesson: res.lesson });
+        setScreen({ kind: 'generated', lesson: res.lesson, mode, key: keyRef.current++ });
         if (location.hash) history.pushState(null, '', location.pathname + location.search);
         window.scrollTo(0, 0);
       } else setGen({ status: 'unsupported', prompt: text });
@@ -112,8 +112,9 @@ export default function App() {
   };
 
   const persist = (list: SavedExperiment[]) => {
-    setSaved(list);
-    return writeSaved(list);
+    const ok = writeSaved(list);
+    if (ok) setSaved(list);
+    return ok;
   };
 
   const save = (lesson: LessonSpec, m: LearningMode, params: Params) => {
@@ -143,7 +144,11 @@ export default function App() {
           onOpenLesson={(id, params) => { setGen({ status: 'idle' }); openLesson(id, mode, params); }}
         />
       ) : screen.kind === 'generated' ? (
-        <GeneratedWorkspace lesson={screen.lesson} onExit={() => goEntry()} />
+        <GeneratedWorkspace key={screen.key} lesson={screen.lesson} initialParams={screen.params} onExit={() => goEntry()} onSave={params => {
+          const entry: SavedExperiment = { id: crypto.randomUUID(), generatedLesson: screen.lesson, title: screen.lesson.title, mode: screen.mode, params, savedAt: Date.now() };
+          const ok = persist([entry, ...saved].slice(0, 50));
+          setToast(ok ? 'Saved to this browser. Find it in Saved experiments.' : 'Couldn’t save: browser storage is full or unavailable. Delete an older experiment and try again.');
+        }} />
       ) : (
         <LessonWorkspace
           key={screen.key}
@@ -161,7 +166,16 @@ export default function App() {
         open={dialog === 'saved'}
         onClose={() => setDialog(null)}
         items={saved}
-        onOpen={(e) => { setDialog(null); openLesson(e.conceptId, e.mode, e.params); }}
+        onOpen={(e) => {
+          setDialog(null);
+          if (e.generatedLesson) {
+            abortRef.current?.abort();
+            setGen({ status: 'idle' });
+            setScreen({ kind: 'generated', lesson: e.generatedLesson, mode: e.mode, params: e.params, key: keyRef.current++ });
+            if (location.hash) history.pushState(null, '', location.pathname + location.search);
+            window.scrollTo(0, 0);
+          } else openLesson(e.conceptId, e.mode, e.params);
+        }}
         onDelete={(id) => persist(saved.filter((s) => s.id !== id))}
       />
       <SettingsDialog open={dialog === 'settings'} onClose={() => setDialog(null)} />

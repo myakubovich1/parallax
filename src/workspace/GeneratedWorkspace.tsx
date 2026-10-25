@@ -1,14 +1,18 @@
 import { useState } from 'react';
-import type { GeneratedLessonSpec } from '../lib/lessons/types';
+import { Icon } from '../components/Icon';
+import type { GeneratedLessonSpec, Params } from '../lib/lessons/types';
 import { SandboxedStage } from '../renderers/SandboxedStage';
 import { MathText } from '../components/MathText';
 
-export function GeneratedWorkspace({ lesson, onExit }: { lesson: GeneratedLessonSpec; onExit: () => void }) {
+export function GeneratedWorkspace({ lesson, initialParams, onExit, onSave }: { lesson: GeneratedLessonSpec; initialParams?: Params; onExit: () => void; onSave: (params: Params) => void }) {
   const defaults = () => Object.fromEntries(lesson.params.map(p => [p.id, p.default]));
-  const [params, setParams] = useState(defaults);
+  const [params, setParams] = useState(() => Object.fromEntries(lesson.params.map(p => [p.id, Math.max(p.min, Math.min(p.max, initialParams?.[p.id] ?? p.default))])));
   return (
     <main id="main" className="generated-workspace">
-      <button className="btn" onClick={onExit}>← Back to start</button>
+      <header className="generated-toolbar">
+        <button className="btn" onClick={onExit}>← Back to start</button>
+        <button className="btn primary" onClick={() => onSave(params)}><Icon name="save" size={16} /> Save experiment</button>
+      </header>
       <p className="instrument-label">AI-generated experiment · Check assumptions and results</p>
       <h1>{lesson.title}</h1>
       <div className="generated-grid">
