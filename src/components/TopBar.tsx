@@ -1,18 +1,18 @@
 import { Icon } from './Icon';
 import { Wordmark } from './Logo';
-import { MiniObserver } from '../renderers/MiniObserver';
+import { RobotHelpLauncher } from './RobotHelpLauncher';
 
-interface Props { onHome: () => void; onNew: () => void; onSaved: () => void; onSettings: () => void; savedCount: number; docked: boolean }
+interface Props { onHome: () => void; onNew: () => void; onSaved: () => void; onSettings: () => void; savedCount: number; docked: boolean; helpOpen: boolean; onHelp: (trigger: HTMLElement) => void }
 
-export function TopBar({ onHome, onNew, onSaved, onSettings, savedCount, docked }: Props) {
+export function TopBar({ onHome, onNew, onSaved, onSettings, savedCount, docked, helpOpen, onHelp }: Props) {
   return (
     <header className="topbar">
       <button className="brand" onClick={onHome} aria-label="Parallax home">
-        {/* Off the entry screen the observer head docks here in place of the logo mark. */}
-        <Wordmark mark={docked ? <MiniObserver /> : undefined} />
+        <Wordmark />
       </button>
       <span className="brand-line">An open mind. An interactive world.</span>
       <nav className="topnav" aria-label="Main">
+        <RobotHelpLauncher open={helpOpen} docked={docked} onOpen={onHelp} />
         <button className="btn ghost" onClick={onNew} aria-label="New experiment">
           <Icon name="plus" size={16} /> <span className="nav-text">New experiment</span>
         </button>

@@ -1,15 +1,18 @@
 import http from 'node:http';
 import { providerConfig, providerStatus, generationRequest, readLesson, providerFailure } from './providers.mjs';
 import { instructions } from './lesson-instructions.mjs';
+import { createHelpApi } from './help.mjs';
 
 // Use the platform's trusted proxy route, including injected secret bindings.
 if (process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.https_proxy || process.env.http_proxy) http.setGlobalProxyFromEnv?.();
 
 export function createApi({ getConfig = () => process.env, fetchImpl = fetch } = {}) {
+  const help = createHelpApi({getConfig, fetchImpl});
   const buckets = new Map();
   let active = 0;
   return async (req, res, next = () => { res.writeHead(404).end(); }) => {
     const path = req.url?.split('?')[0];
+    if (path === '/api/help') return help(req, res);
     if (!path?.startsWith('/api/')) return next();
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');

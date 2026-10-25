@@ -31,6 +31,7 @@ interface Props {
   onEditInput: () => void;
   onOpenLesson: (id: ConceptId, params?: Params) => void;
   onOpenFormula: (id: string) => void;
+  onHelp: (trigger: HTMLElement) => void;
 }
 
 const EXAMPLES: { id: ConceptId; label: string }[] = [
@@ -93,7 +94,7 @@ export const EntryScreen = forwardRef<HTMLTextAreaElement, Props>(function Entry
 
         <section className="entry-right" aria-label="Live preview: wave interference">
           <div className="preview-id instrument-label"><span>02 / In the field</span><span>Wave interference</span></div>
-          <WavePreview onOpen={(params) => onOpenLesson('wave-interference', params)} />
+          <WavePreview onOpen={(params) => onOpenLesson('wave-interference', params)} onHelp={props.onHelp} />
         </section>
       </div>
       <FormulaLibrary onSelect={id => { const builtin = LESSONS.find(l => l.id === id); if (builtin) onOpenLesson(builtin.id); else props.onOpenFormula(id); }}/>

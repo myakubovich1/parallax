@@ -56,7 +56,7 @@ function PresetThumb({ phi }: { phi: number }) {
 }
 
 /** Entry-screen preview: the real wave model with only phase exposed. */
-export function WavePreview({ onOpen }: { onOpen: (params: Params) => void }) {
+export function WavePreview({ onOpen, onHelp }: { onOpen: (params: Params) => void; onHelp?: (trigger: HTMLElement) => void }) {
   const { reducedMotion, effects } = useSettings();
   const [params, setParams] = useState<Params>({ A1: 1, A2: 1, f: 0.5, phi: 60 });
   const [playing, setPlaying] = useState(!reducedMotion);
@@ -109,6 +109,7 @@ export function WavePreview({ onOpen }: { onOpen: (params: Params) => void }) {
         reveal
       >
         <div className="stage-body preview-stage">
+          {onHelp && <button type="button" className="btn small observer-chat-invite" onClick={event => onHelp(event.currentTarget)}>Questions? Ask Parallax <Icon name="info" size={16} /></button>}
           <ObserverHead
             params={p}
             clock={clock}

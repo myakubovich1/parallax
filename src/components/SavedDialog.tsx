@@ -6,9 +6,9 @@ import { Dialog } from './Dialog';
 import { Icon } from './Icon';
 import { MODES } from './ModeSelector';
 
-interface Props { open: boolean; onClose: () => void; items: SavedExperiment[]; onOpen: (e: SavedExperiment) => void; onDelete: (id: string) => void }
+interface Props { open: boolean; onClose: () => void; items: SavedExperiment[]; onOpen: (e: SavedExperiment) => void; onDelete: (id: string) => void; onHelp?: (trigger: HTMLElement) => void }
 
-export function SavedDialog({ open, onClose, items, onOpen, onDelete }: Props) {
+export function SavedDialog({ open, onClose, items, onOpen, onDelete, onHelp }: Props) {
   return (
     <Dialog open={open} onClose={onClose} title="Saved experiments" meta="This browser only">
       {items.length === 0 ? (
@@ -43,6 +43,7 @@ export function SavedDialog({ open, onClose, items, onOpen, onDelete }: Props) {
           })}
         </ul>
       )}
+      {onHelp && <button type="button" className="link-btn" onClick={event => onHelp(event.currentTarget)}>Ask Parallax about saved experiments →</button>}
     </Dialog>
   );
 }
