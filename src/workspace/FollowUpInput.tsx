@@ -29,7 +29,7 @@ export function FollowUpInput({ suggestions, reply, onSubmit }: Props) {
       <p className={`followup-reply ${reply ? reply.kind : ''}`} role="status" aria-live="polite">
         {reply && (
           <>
-            <span className="instrument-label">{reply.kind === 'done' ? 'Applied' : reply.kind === 'unsupported' ? 'Demo mode' : 'Tip'}</span> {reply.text}
+            <span className="instrument-label">{reply.kind === 'done' ? 'Applied' : reply.kind === 'unsupported' ? 'Built-in actions' : 'Tip'}</span> {reply.text}
           </>
         )}
       </p>
