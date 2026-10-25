@@ -44,7 +44,7 @@ export const EntryScreen = forwardRef<HTMLTextAreaElement, Props>(function Entry
       <div className="entry-grid">
         <section className="entry-left" aria-labelledby="entry-title">
           <p className="instrument-label kicker"><span className="live-dot on" aria-hidden="true" /> The interactive science lab</p>
-          <h1 id="entry-title"><span>Equations.</span><br />Explained.</h1>
+          <h1 id="entry-title"><span>World.</span><br />Explained.</h1>
           <p className="entry-copy">Change a variable. See the whole idea.</p>
 
           <form className="entry-form" onSubmit={(e) => { e.preventDefault(); onCreate(); }} noValidate>
