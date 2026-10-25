@@ -103,7 +103,7 @@ check('Prediction reveal set φ = 180°', (await val(p, '#range-phi')) === '180'
 
 // Playback controls
 await p.click('.stage-controls button[aria-label=Pause]').catch(() => {});
-const t1 = await p.evaluate(() => document.querySelector('canvas').getAttribute('aria-label'));
+const t1 = await p.evaluate(() => document.querySelector('.stage-body canvas').getAttribute('aria-label'));
 await p.click('button[aria-label="Reset time"]');
 await p.selectOption('.speed select', '0.5');
 check('Speed control changes playback only', (await val(p, '#range-f')) === '0.5' && (await val(p, '.speed select')) === '0.5', `f stays ${await val(p, '#range-f')} Hz`);
@@ -150,10 +150,10 @@ await q.keyboard.press('Escape');
 await q.goto(base + '#wave-interference');
 await q.waitForSelector('.stage-controls');
 check('Reduced motion: lesson starts paused', await q.isVisible('.stage-controls button[aria-label=Play]'));
-const before = await q.$eval('canvas', (c) => c.toDataURL().length);
+const before = await q.$eval('.stage-body canvas', (c) => c.toDataURL().length);
 await q.click('button[aria-label="Advance one eighth of a period"]');
 await q.waitForTimeout(100);
-check('Reduced motion: manual stepping works', (await q.$eval('canvas', (c) => c.toDataURL().length)) !== before);
+check('Reduced motion: manual stepping works', (await q.$eval('.stage-body canvas', (c) => c.toDataURL().length)) !== before);
 
 // Failure state (dev QA hook)
 await q.goto(base + '?demo-failure');
