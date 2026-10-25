@@ -43,7 +43,7 @@ export const EntryScreen = forwardRef<HTMLTextAreaElement, Props>(function Entry
       </div>
       <div className="entry-grid">
         <section className="entry-left" aria-labelledby="entry-title">
-          <p className="instrument-label kicker"><span className="live-dot on" aria-hidden="true" /> The interactive science lab</p>
+          <p className="instrument-label kicker"><span className="live-dot on" aria-hidden="true" /> Your interactive science lab</p>
           <h1 id="entry-title"><span>World.</span><br />Explained.</h1>
           <p className="entry-copy">Change a variable. See the whole idea.</p>
 
