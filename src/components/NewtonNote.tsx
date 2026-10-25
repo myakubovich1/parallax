@@ -55,7 +55,9 @@ export function NewtonNote({ onTryIt }: { onTryIt: () => void }) {
           the falling apple and the orbiting Moon: the same physics on Earth and in the sky.
         </p>
         <p>
-          He published the idea in his <i>Principia</i> (1687) as the law in this lesson, F = G m₁m₂ / r². It went on to
+          This story belongs to the law of universal gravitation, not to Newton’s three laws of motion (inertia, F = ma,
+          action and reaction), although both appear in the same book. He published the idea in his <i>Principia</i> (1687)
+          as the law in this lesson, F = G m₁m₂ / r². It went on to
           predict planetary orbits, the tides and the return of Halley’s comet, and it still plots spacecraft
           trajectories today.
         </p>

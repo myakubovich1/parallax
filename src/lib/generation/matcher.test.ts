@@ -19,4 +19,11 @@ describe('demo matcher', () => {
     expect(id('Explain photosynthesis')).toBeNull();
     expect(id('E = mc^2')).toBeNull();
   });
+
+  it('sends only gravitation, not the laws of motion, to the gravity lesson (the one with the apple story)', () => {
+    for (const p of ["Newton's law", "Newton's law of universal gravitation", "Newton’s law of gravity", 'F = G m1 m2 / r^2', 'why do apples fall'])
+      expect(id(p), p).toBe('gravitational-attraction');
+    for (const p of ["Newton's laws", "Newton's laws of motion", "Newton's law of motion", "Newton's first law", "Newton's 3rd law", 'law of inertia', "Newton's law of cooling"])
+      expect(id(p), p).not.toBe('gravitational-attraction');
+  });
 });
