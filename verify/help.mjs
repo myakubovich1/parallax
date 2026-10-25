@@ -68,10 +68,9 @@ try {
   assert.equal(await chat.locator('.guide-answer img').count(), 0);
   assert.equal(await page.evaluate(() => window.guideXss), undefined);
   await page.screenshot({ path: new URL('./screens/guide-desktop.png', import.meta.url).pathname });
-  await chat.getByRole('button', { name: 'Browse the library', exact: true }).click();
-  await page.waitForFunction(
-    () => document.querySelector('.library-toggle')?.getAttribute('aria-expanded') === 'true',
-  );
+  await chat.getByRole('button', { name: 'Start an experiment', exact: true }).click();
+  await page.waitForFunction(() => document.activeElement?.id === 'concept');
+  assert.equal(await page.locator('.formula-library,.library-toggle').count(), 0);
   assert.equal(await page.locator('#concept').inputValue(), 'Kinetic energy');
   await trigger.click();
   const count = await chat.locator('.guide-message').count();

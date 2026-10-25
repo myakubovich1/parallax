@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { createHelpApi, helpConfig, parseGuideReply, validateHelpBody } from './help.mjs';
 import { createApi } from './api.mjs';
+import { localGuideAnswer } from './help-guide.mjs';
 
 const context = {
   screen: 'lesson',
@@ -222,4 +223,13 @@ test('context and actions are bounded; plain text works and invalid JSON fails',
   assert.equal(parseGuideReply('A plain text answer.', context).answer, 'A plain text answer.');
   assert.throws(() => parseGuideReply('{bad json', context));
   assert.throws(() => helpConfig({ PARALLAX_HELP_MODEL: 'gemini-not-gemma' }));
+});
+
+test('guide points to the question input instead of the removed catalogue', () => {
+  for (const q of ['What can I enter?', 'Can I explore without AI?', 'Where can I browse the library?']) {
+    const answer = localGuideAnswer(q, context);
+    assert.ok(answer);
+    assert.doesNotMatch(answer.answer, /\bbrowse\b|search by name|50 ready|preloaded/i);
+    assert.ok(answer.actions.every((a) => a.type !== 'open-library'));
+  }
 });

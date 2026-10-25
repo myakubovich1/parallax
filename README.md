@@ -42,9 +42,9 @@ Keep your ignored `.env.local` on your computer. If Git reports conflicts or loc
 
 ## Preloaded formula library
 
-Parallax ships **50 authored, deterministic experiments**: 47 common formulas plus the three detailed lessons below. Browse the searchable, subject-filtered collection on the home screen, or type a formula/name. Preloaded matches never call an AI provider and need no API key. Subjects include mechanics, waves, electricity, thermodynamics, fluids, optics, and mathematics.
+Parallax ships **50 authored, deterministic experiments**: 47 common formulas plus the three detailed lessons below. Enter a formula, a concept name, or a question on the home screen. Matching formulas open their premium visual scenes directly; the catalogue and source labels are not shown in the interface. Preloaded matches never call an AI provider and need no API key. Subjects include mechanics, waves, electricity, thermodynamics, fluids, optics, and mathematics.
 
-The matcher accepts common notation and equivalent product forms, for example `kinetic energy`, `½mv²`, `1/2*m*v^2`, `0.5mv**2`, and `E = mv²/2`. Recognition uses a bounded arithmetic parser and authored aliases; it is not a general symbolic theorem prover. Requests outside the library continue to the selected AI provider.
+The matcher accepts common notation and equivalent product forms, for example `kinetic energy`, `½mv²`, `1/2*m*v^2`, `0.5mv**2`, and `E = mv²/2`. Recognition preserves displayed Unicode/LaTeX grouping and uses bounded polynomial/rational normalization, equation aliases, and concept names. Rearrangements such as `P=W/t`, `W=Pt`, and `t=W/P` select the same power scene. Exact equation matches take priority over broad keyword matches; it is not a general symbolic theorem prover. Requests outside the library continue to the selected AI provider.
 
 Likely input mistakes are reviewed before generation. An extra slash (`1//2mv^2`), a missing closing parenthesis, or a small coefficient/exponent difference from a known formula prompts a suggested correction. The user can confirm, edit, or keep the original; nothing is silently substituted and a pending review makes no provider call. Incomplete equations and vague topics ask for more detail. Valid unfamiliar formulas and specific scientific questions continue to AI. This review is a bounded input check, not a general scientific correctness validator.
 
@@ -64,7 +64,7 @@ Prompts that do not match the library are sent to the same-origin `/api/generate
 
 The observer robot is a dedicated help button in the header on every screen, separate from the home link. Hover or keyboard focus introduces the guide; click or tap to open it. The large welcome-screen robot has a matching Ask Parallax button. Desktop chat is a nonmodal side panel; mobile chat and help opened from Settings/Saved use a native modal dialog with focus containment and Escape support. Closing preserves this tab's conversation; Clear conversation deletes it. History uses bounded `sessionStorage`, and remains usable in memory if storage is unavailable.
 
-Quick help is answered directly from the versioned app guide. Other questions use hosted **Gemma** via Google AI Studio's API, grounded in that guide plus a small snapshot of the current screen: title, mode, visible error, control labels/values, readouts and saved count. It does not send the full DOM, stored experiments, API keys or account details. Each answer identifies its source. Suggested actions can fill a question without submitting, open the library or saved experiments, show learning modes, open settings, or highlight a real control. These actions run only when clicked and cannot execute arbitrary model code or change experiment parameters.
+Quick help is answered directly from the versioned app guide. Other questions use hosted **Gemma** via Google AI Studio's API, grounded in that guide plus a small snapshot of the current screen: title, mode, visible error, control labels/values, readouts and saved count. It does not send the full DOM, stored experiments, API keys or account details. Each answer identifies its source. Suggested actions can fill a question without submitting, return to the question input or open saved experiments, show learning modes, open settings, or highlight a real control. These actions run only when clicked and cannot execute arbitrary model code or change experiment parameters.
 
 Add these **server-only** Vercel environment variables for **Production** and **Preview**, then redeploy:
 
@@ -118,7 +118,7 @@ Development-only QA hooks: `?demo-slow` shows the in-progress state, and `?demo-
 
 ## Architecture
 
-- `src/lib/catalog/*`: 47 formula definitions, bounded notation matching and calculation tests; `CatalogStage.tsx` provides playback and graph controls; `src/renderers/catalog/*` contains the formula-specific scene painters. Canvas rendering uses the shared visibility-aware clock and suspends playback off-screen or in a hidden tab.
+- `src/lib/catalog/*`: 47 formula definitions, bounded notation/equation matching and calculation tests; `CatalogStage.tsx` provides playback and graph controls; `src/renderers/catalog/*` contains the formula-specific scene painters. Canvas rendering uses the shared visibility-aware clock and suspends playback off-screen or in a hidden tab.
 - `src/lib/physics/*`: pure calculations with no UI code, tested in `physics.test.ts`.
 - `src/lib/lessons/*`: concept metadata, equation terms, parameters, steps, predictions and follow-ups (`LessonSpec`).
 - `src/lib/generation/adapter.ts`: the `GenerationAdapter` interface. `liveAdapter.ts` uses the same-origin API for custom lessons, with an `AbortSignal` and typed errors; the API key stays in `server/api.mjs`.

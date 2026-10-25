@@ -208,13 +208,7 @@ export default function App() {
     if (action.type === 'fill-question') {
       goEntry(true); setPrompt(action.question); setError(null);
     } else if (action.type === 'open-library') {
-      goEntry();
-      requestAnimationFrame(() => {
-        const toggle = document.querySelector<HTMLButtonElement>('.library-toggle');
-        if (toggle?.getAttribute('aria-expanded') !== 'true') toggle?.click();
-        toggle?.scrollIntoView({block: 'start', behavior: 'instant'});
-        toggle?.focus();
-      });
+      goEntry(true);
     } else if (action.type === 'open-saved') setDialog('saved');
     else if (action.type === 'open-settings') setDialog('settings');
     else requestAnimationFrame(() => {

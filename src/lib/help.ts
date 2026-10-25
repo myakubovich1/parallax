@@ -102,7 +102,7 @@ export function guideActionLabel(action: GuideAction): string {
   return action.type === 'fill-question'
     ? 'Use this question'
     : action.type === 'open-library'
-      ? 'Browse the library'
+      ? 'Start an experiment'
       : action.type === 'open-saved'
         ? 'Open saved experiments'
         : action.type === 'open-settings'
