@@ -3,11 +3,10 @@ import { Icon } from '../components/Icon';
 import { InstrumentFrame } from '../components/InstrumentFrame';
 import { useOnScreen, useSimClock } from '../lib/clock';
 import { fixed } from '../lib/format';
-import { waveLesson } from '../lib/lessons/wave';
 import type { Params } from '../lib/lessons/types';
 import { classify, phaseOffsetMeters, resultantAmplitude, type WaveParams } from '../lib/physics/wave';
 import { useSettings } from '../lib/settings';
-import WaveRenderer from '../renderers/WaveRenderer';
+import { ObserverHead } from '../renderers/ObserverHead';
 
 const KIND = { cancellation: 'Complete cancellation', constructive: 'Constructive', destructive: 'Destructive', partial: 'Partial' };
 
@@ -30,20 +29,7 @@ export function WavePreview({ onOpen }: { onOpen: (params: Params) => void }) {
         reveal
       >
         <div className="stage-body preview-stage">
-          <WaveRenderer
-            lesson={waveLesson}
-            params={params}
-            setParams={(patch) => setParams((x) => ({ ...x, ...patch }))}
-            clock={clock}
-            step={0}
-            focusedTerm={focus}
-            onFocusTerm={setFocus}
-            highlight="phase"
-            reference={null}
-            effects={effects}
-            reducedMotion={reducedMotion}
-            compact
-          />
+          <ObserverHead params={p} clock={clock} focus={focus} effects={effects} reducedMotion={reducedMotion} />
         </div>
         <div className="preview-controls">
           <button className="btn icon-only" onClick={() => setPlaying((v) => !v)} aria-label={playing ? 'Pause preview' : 'Play preview'} disabled={reducedMotion} title={reducedMotion ? 'Reduced motion is on' : undefined}>
