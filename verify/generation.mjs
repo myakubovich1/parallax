@@ -21,12 +21,12 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/api/generate', async route => {
     generationCalls++;
-    assert.deepEqual(route.request().postDataJSON(), { prompt: 'Explain F = -kx', mode: 'explore' });
+    assert.deepEqual(route.request().postDataJSON(), { prompt: 'Explain a hypothetical cubic restoring force', mode: 'explore' });
     assert.equal(route.request().headers().authorization, undefined);
     await route.fulfill({ json: { lesson } });
   });
   await page.goto(base);
-  await page.locator('#concept').fill('Explain F = -kx');
+  await page.locator('#concept').fill('Explain a hypothetical cubic restoring force');
   await page.getByRole('button', { name: 'Create experiment' }).click();
   await page.getByRole('heading', { name: lesson.title, exact: true }).waitFor();
   const frame = page.frameLocator('iframe');
@@ -57,7 +57,7 @@ try {
   await page.getByRole('button', { name: 'Reset values' }).click();
   await frame.locator('#force').filter({ hasText: 'Force: -2 N' }).waitFor();
   await page.getByRole('button', { name: 'Back to start' }).click();
-  await page.locator('#concept').fill('Explain F = -kx');
+  await page.locator('#concept').fill('Explain a hypothetical cubic restoring force');
   await page.route('**/api/generate', route => route.fulfill({ json: { lesson: { title: 'invalid' } } }));
   await page.getByRole('button', { name: 'Create experiment' }).click();
   await page.locator('.gen-status.failed').filter({ hasText: 'invalid lesson' }).waitFor();

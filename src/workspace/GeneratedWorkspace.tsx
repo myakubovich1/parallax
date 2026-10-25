@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Icon } from '../components/Icon';
 import type { GeneratedLessonSpec, Params } from '../lib/lessons/types';
 import { SandboxedStage } from '../renderers/SandboxedStage';
 import { MathText } from '../components/MathText';
 
-export function GeneratedWorkspace({ lesson, initialParams, onExit, onSave }: { lesson: GeneratedLessonSpec; initialParams?: Params; onExit: () => void; onSave: (params: Params) => void }) {
+export function GeneratedWorkspace({ lesson, initialParams, onExit, onSave, stage, label }: { lesson: GeneratedLessonSpec; initialParams?: Params; onExit: () => void; onSave: (params: Params) => void; stage?: (params: Params) => ReactNode; label?: string }) {
   const defaults = () => Object.fromEntries(lesson.params.map(p => [p.id, p.default]));
   const [params, setParams] = useState(() => Object.fromEntries(lesson.params.map(p => [p.id, Math.max(p.min, Math.min(p.max, initialParams?.[p.id] ?? p.default))])));
   return (
@@ -13,11 +13,11 @@ export function GeneratedWorkspace({ lesson, initialParams, onExit, onSave }: { 
         <button className="btn" onClick={onExit}>← Back to start</button>
         <button className="btn primary" onClick={() => onSave(params)}><Icon name="save" size={16} /> Save experiment</button>
       </header>
-      <p className="instrument-label">AI-generated experiment · Check assumptions and results</p>
+      <p className="instrument-label">{label ?? 'AI-generated experiment · Check assumptions and results'}</p>
       <h1>{lesson.title}</h1>
       <div className="generated-grid">
         <section aria-label="Interactive experiment">
-          <div className="generated-stage"><SandboxedStage html={lesson.stageHtml} params={params} title={lesson.title} /></div>
+          {stage ? stage(params) : <div className="generated-stage"><SandboxedStage html={lesson.stageHtml} params={params} title={lesson.title} /></div>}
           <div className="frame generated-controls">
             {lesson.params.map(p => <label key={p.id} className="generated-param" htmlFor={`generated-${p.id}`}>
               <span>{p.label}: <output>{params[p.id].toFixed(p.digits)} {p.unit}</output></span>

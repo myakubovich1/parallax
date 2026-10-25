@@ -16,12 +16,33 @@ Browser checks can use system Chromium with `PARALLAX_CHROMIUM_PATH=/usr/bin/chr
 ```bash
 npm run verify       # 36 end-to-end interaction checks (Playwright)
 node verify/generation.mjs # custom equation UI checks (mocked provider)
+node verify/catalog.mjs    # all 47 new models, limits, aliases, save and zero API calls (dev server)
 npm run screens      # desktop / tablet / mobile screenshots → verify/screens/
 ```
 
-## Authored examples
+## Updating a local checkout
 
-Parallax ships three hand-written, deterministic lessons, and `src/lib/generation/demoAdapter.ts` matches prompts and paraphrases to them:
+`npm run dev` serves local files; it does not fetch GitHub changes. Updates from this work are on `codex/live-generation-terminal-ui` until merged into `main`. Stop the dev server, then run:
+
+```bash
+git fetch origin
+git switch codex/live-generation-terminal-ui
+git pull --ff-only
+npm ci
+npm run dev
+```
+
+Keep your ignored `.env.local` on your computer. If Git reports conflicts or local changes, resolve or preserve those changes before updating; do not discard them blindly. Check `git log -1 --oneline` to confirm the downloaded version. Open the port printed by the new dev server; an older server may still be running on a different port.
+
+## Preloaded formula library
+
+Parallax ships **50 authored, deterministic experiments**: 47 common formulas plus the three detailed lessons below. Browse the searchable, subject-filtered collection on the home screen, or type a formula/name. Preloaded matches never call an AI provider and need no API key. Subjects include mechanics, waves, electricity, thermodynamics, fluids, optics, and mathematics.
+
+The matcher accepts common notation and equivalent product forms, for example `kinetic energy`, `½mv²`, `1/2*m*v^2`, `0.5mv**2`, and `E = mv²/2`. Recognition uses a bounded arithmetic parser and authored aliases; it is not a general symbolic theorem prover. Requests outside the library continue to the selected AI provider.
+
+Each new model includes a schematic SVG diagram, an exact numerical response curve, live readouts, adjustable parameters, assumptions, and Save/reopen support. Motion-based models have pause/reset controls; static relationships stay static. Animation speed and schematic dimensions are illustrative. Quick, Explore and Basics provide different explanation lengths.
+
+The original three lessons retain their richer custom renderers, predictions and follow-ups:
 
 | Lesson | Model | Renderer |
 |---|---|---|
@@ -29,7 +50,7 @@ Parallax ships three hand-written, deterministic lessons, and `src/lib/generatio
 | Gravitational attraction | `F = G m₁ m₂ / r²`, SI units, lead spheres drawn to scale | SVG: draggable bodies, log-scaled force arrows, equipotential contours |
 | Gradient descent | `L(w) = (w − 3)²`, `w_next = w − η·2(w − 3)` | SVG: loss curve, tangent, step track, halts at \|w − 3\| > 12 |
 
-Other prompts are sent to the same-origin `/api/generate` endpoint. The server calls Gemini by default, validates the structured lesson, and returns an equation, explanation, parameter controls and an interactive visualization. AI-generated content can be incorrect; each lesson displays its assumptions and limitations. Use Save experiment to keep a generated lesson and its current slider settings in Saved experiments. Saved lessons reopen without another API call, including after a browser refresh; storage is local to that browser.
+Prompts that do not match the library are sent to the same-origin `/api/generate` endpoint. The server calls Gemini by default, validates the structured lesson, and returns an equation, explanation, parameter controls and an interactive visualization. AI-generated content can be incorrect; each lesson displays its assumptions and limitations. Use Save experiment to keep a generated lesson and its current slider settings in Saved experiments. Saved lessons reopen without another API call, including after a browser refresh; storage is local to that browser.
 
 ## Secure live generation
 
@@ -60,6 +81,7 @@ Development-only QA hooks: `?demo-slow` shows the in-progress state, and `?demo-
 
 ## Architecture
 
+- `src/lib/catalog/*`: 47 formula definitions, bounded notation matching and calculation tests; `CatalogStage.tsx` provides shared authored visual families.
 - `src/lib/physics/*`: pure calculations with no UI code, tested in `physics.test.ts`.
 - `src/lib/lessons/*`: concept metadata, equation terms, parameters, steps, predictions and follow-ups (`LessonSpec`).
 - `src/lib/generation/adapter.ts`: the `GenerationAdapter` interface. `liveAdapter.ts` uses the same-origin API for custom lessons, with an `AbortSignal` and typed errors; the API key stays in `server/api.mjs`.

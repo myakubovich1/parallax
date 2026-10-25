@@ -1,4 +1,5 @@
 import { forwardRef } from 'react';
+import { FormulaLibrary } from '../components/FormulaLibrary';
 import { ConceptInput } from '../components/ConceptInput';
 import { Icon } from '../components/Icon';
 import { ModeSelector } from '../components/ModeSelector';
@@ -24,6 +25,7 @@ interface Props {
   onCancel: () => void;
   onRetry: () => void;
   onOpenLesson: (id: ConceptId, params?: Params) => void;
+  onOpenFormula: (id: string) => void;
 }
 
 const EXAMPLES: { id: ConceptId; label: string }[] = [
@@ -79,9 +81,10 @@ export const EntryScreen = forwardRef<HTMLTextAreaElement, Props>(function Entry
           </div>
         </section>
       </div>
+      <FormulaLibrary onSelect={id => { const builtin = LESSONS.find(l => l.id === id); if (builtin) onOpenLesson(builtin.id); else props.onOpenFormula(id); }}/>
       <footer className="entry-foot">
         <span className="instrument-label">Less memorizing. More understanding.</span>
-        <span className="muted small">Custom equations use AI. Example lessons are authored.</span>
+        <span className="muted small">50 preloaded formulas. AI for everything else.</span>
       </footer>
     </main>
   );

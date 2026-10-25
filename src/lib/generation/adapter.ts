@@ -8,7 +8,7 @@ import type { GeneratedLessonSpec, LearningMode, LessonSpec } from '../lessons/t
 export type GenerationStage = 'matching' | 'generating' | 'loading';
 
 export const STAGE_LABEL: Record<GenerationStage, string> = {
-  matching: 'Matching your request to a demo lesson',
+  matching: 'Finding a preloaded experiment',
   generating: 'Generating an interactive equation lesson',
   loading: 'Loading the lesson’s interactive model',
 };
@@ -17,6 +17,7 @@ export interface GenerationRequest { prompt: string; mode: LearningMode }
 
 export type GenerationResult =
   | { status: 'ready'; lesson: LessonSpec; source: 'demo' | 'live' }
+  | { status: 'preloaded'; id: string }
   | { status: 'generated'; lesson: GeneratedLessonSpec }
   | { status: 'unsupported'; prompt: string };
 
