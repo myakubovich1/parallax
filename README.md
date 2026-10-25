@@ -133,3 +133,7 @@ Saved experiments and settings are stored in `localStorage`, so they live in thi
 ## Phosphor environment
 
 Every screen shares an ordered-dither canvas with green and ice-blue contour fields. On pointer hover, nearby pixels ease upward and brighten into a raised surface. The canvas is decorative and never intercepts controls; it renders only while the pointer response is settling, stops in hidden tabs, and caps its grain count on larger displays. Touch and reduced-motion users get a static field. Settings → Visual effects disables the background and surface treatments throughout the app.
+
+## License
+
+Parallax is open source under the [MIT License](LICENSE). You may use, modify and distribute it, provided the copyright notice is kept.
