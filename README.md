@@ -16,6 +16,7 @@ Browser checks can use system Chromium with `PARALLAX_CHROMIUM_PATH=/usr/bin/chr
 ```bash
 npm run verify       # 36 end-to-end interaction checks (Playwright)
 node verify/generation.mjs # custom equation UI checks (mocked provider)
+node verify/experiments.mjs # rich lessons: units, modes, predictions, comparisons and visual fallback
 node verify/background.mjs # shared background, hover, motion preferences and responsive layouts
 npm run screens      # desktop / tablet / mobile screenshots → verify/screens/
 ```
@@ -33,6 +34,12 @@ Parallax ships three hand-written, deterministic lessons, and `src/lib/generatio
 Other prompts are sent to the same-origin `/api/generate` endpoint. The server calls the configured provider (OpenAI in `.env.example`), validates the structured lesson, and returns an equation, explanation, parameter controls and an interactive visualization. AI-generated content can be incorrect; each lesson displays its assumptions and limitations. Use Save experiment to keep a generated lesson and its current slider settings in Saved experiments. Saved lessons reopen without another API call, including after a browser refresh; storage is local to that browser.
 
 ## Secure live generation
+
+Generated lessons now use a versioned experiment contract: a learning objective, central intuition, misconception, connected equation terms, fixed constants, computed outputs, presets, a prediction/reveal challenge and a guided sequence. The UI provides Quick intuition, Explain & explore and Build from basics without regenerating the lesson. Symbol selection connects the equation, control and scene; pinned values support before/after comparisons. Shared comparison and spring renderers use the same colors and controls as the authored lessons, with an optional graph and readable compact views.
+
+The shared arithmetic engine interprets bounded postfix formulas without `eval`. It converts display units into SI once, checks formula dimensions, tests endpoints and interior samples, rejects inert sliders and evaluates numerical reference cases. Mass–energy and Hooke’s law also have independent reference calculations. For example, 1 g corresponds to about 89.88 TJ of rest energy; 1 kg is about 0.08988 EJ. These checks establish numerical consistency, not scientific correctness for arbitrary generated models. Unsupported domains and failed checks produce a recoverable error; one repair request to the same provider is allowed. No automatic provider fallback is introduced.
+
+Custom HTML remains isolated in an opaque-origin iframe. It is hidden while defaults and every combination of parameter endpoints are checked. Its outputs must agree with the shared engine, and display checks detect clipped, overlapping or unreadably small SVG labels. Failed or unresponsive custom scenes fall back to a shared quantity view. Old saved visualizations remain readable, and new saved experiments preserve their learning mode and parameters. The essential limitation stays visible; detailed assumptions and checks expand on demand.
 
 Use Node.js 24.5 or newer. The server honors the platform’s HTTPS proxy and trusted CA configuration.
 

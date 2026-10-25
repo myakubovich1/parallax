@@ -8,8 +8,8 @@ import type { GeneratedLessonSpec, LearningMode, LessonSpec } from '../lessons/t
 export type GenerationStage = 'matching' | 'generating' | 'loading';
 
 export const STAGE_LABEL: Record<GenerationStage, string> = {
-  matching: 'Matching your request to a demo lesson',
-  generating: 'Generating an interactive equation lesson',
+  matching: 'Finding a starting model for your question',
+  generating: 'Designing your experiment and checking its model',
   loading: 'Loading the lesson’s interactive model',
 };
 

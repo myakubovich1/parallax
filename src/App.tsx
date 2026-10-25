@@ -144,8 +144,8 @@ export default function App() {
           onOpenLesson={(id, params) => { setGen({ status: 'idle' }); openLesson(id, mode, params); }}
         />
       ) : screen.kind === 'generated' ? (
-        <GeneratedWorkspace key={screen.key} lesson={screen.lesson} initialParams={screen.params} onExit={() => goEntry()} onSave={params => {
-          const entry: SavedExperiment = { id: crypto.randomUUID(), generatedLesson: screen.lesson, title: screen.lesson.title, mode: screen.mode, params, savedAt: Date.now() };
+        <GeneratedWorkspace key={screen.key} lesson={screen.lesson} initialMode={screen.mode} initialParams={screen.params} onExit={() => goEntry()} onSave={(params, savedMode) => {
+          const entry: SavedExperiment = { id: crypto.randomUUID(), generatedLesson: screen.lesson, title: screen.lesson.title, mode: savedMode, params, savedAt: Date.now() };
           const ok = persist([entry, ...saved].slice(0, 50));
           setToast(ok ? 'Saved to this browser. Find it in Saved experiments.' : 'Couldn’t save: browser storage is full or unavailable. Delete an older experiment and try again.');
         }} />

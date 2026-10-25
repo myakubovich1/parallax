@@ -31,9 +31,9 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
         ))}
       </fieldset>
       <div className="setting stack">
-        <p className="setting-name">Demo mode</p>
+        <p className="setting-name">Your lessons</p>
         <p className="muted small">
-          Live lesson generation isn’t connected. Parallax runs three authored, deterministic lessons and recognises questions about them. Nothing you type leaves this browser.
+          Example lessons run in your browser. Custom questions go to the server’s configured AI provider. Saved experiments and preferences stay in this browser.
         </p>
       </div>
     </Dialog>

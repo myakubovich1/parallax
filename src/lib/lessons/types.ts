@@ -106,7 +106,7 @@ export interface LessonSpec {
 }
 
 /** Data-only lesson returned by the server; validated before rendering. */
-export interface GeneratedLessonSpec {
+export interface LegacyGeneratedLesson {
   title: string;
   equation: string;
   explanation: string[];
@@ -115,3 +115,18 @@ export interface GeneratedLessonSpec {
   params: Omit<ParamDef, 'term'>[];
   assumptions: string[];
 }
+
+export interface ExperimentLesson extends LegacyGeneratedLesson {
+  version: 2;
+  plan: { objective: string; takeaway: string; misconception: string; interaction: string; observation: string; visualReason: string };
+  constants: {id: string; symbol: string; label: string; value: number; unit: string; meaning: string}[];
+  outputs: {id: string; symbol: string; label: string; unit: string; displayUnit: string; formula: string[]; digits: number; meaning: string}[];
+  equationParts: {text: string; termId: string}[];
+  renderer: {kind: 'comparison' | 'spring' | 'custom'; inputId: string; outputId: string; caption: string};
+  presets: {label: string; values: number[]; note: string}[];
+  prediction: {question: string; setup: number[]; reveal: number[]; options: string[]; correctIndex: number; explanation: string; outputId: string};
+  basics: {background: string; model: string; experiment: string};
+  checks: {values: number[]; outputId: string; expectedSI: number; relativeTolerance: number}[];
+}
+export type GeneratedLessonSpec = LegacyGeneratedLesson | ExperimentLesson;
+export const isExperiment = (lesson: GeneratedLessonSpec): lesson is ExperimentLesson => 'version' in lesson && lesson.version === 2;
