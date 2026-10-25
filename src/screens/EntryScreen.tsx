@@ -29,6 +29,7 @@ interface Props {
   onConfirmInput: (text: string) => void;
   onEditInput: () => void;
   onOpenLesson: (id: ConceptId, params?: Params) => void;
+  onHelp: (trigger: HTMLElement) => void;
 }
 
 const EXAMPLES: { id: ConceptId; label: string }[] = [
@@ -91,7 +92,7 @@ export const EntryScreen = forwardRef<HTMLTextAreaElement, Props>(function Entry
 
         <section className="entry-right" aria-label="Live preview: wave interference">
           <div className="preview-id instrument-label"><span>02 / In the field</span><span>Wave interference</span></div>
-          <WavePreview onOpen={(params) => onOpenLesson('wave-interference', params)} />
+          <WavePreview onOpen={(params) => onOpenLesson('wave-interference', params)} onHelp={props.onHelp} />
         </section>
       </div>
       <footer className="entry-foot">

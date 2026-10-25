@@ -19,6 +19,7 @@ node verify/generation.mjs # custom equation UI checks (mocked provider)
 node verify/catalog.mjs    # all 47 new models, limits, aliases, save and zero API calls (dev server)
 node verify/catalog-quality.mjs # canvas label bounds, collisions, comparison, keyboard and prediction
 node verify/input-ux.mjs   # equation confirmation, manual slider control, canvas stability and mobile input
+node verify/help.mjs       # robot guide, contextual chat, safe actions, persistence and mobile modal
 node verify/eggs.mjs       # triggers all 12 easter eggs (no spoilers here; read the script)
 node verify/experiments.mjs # rich lessons: units, modes, predictions, comparisons and visual fallback
 node verify/background.mjs # shared background, hover, motion preferences and responsive layouts
@@ -59,7 +60,24 @@ The original three lessons retain their richer custom renderers, predictions and
 
 Prompts that do not match the library are sent to the same-origin `/api/generate` endpoint. The server calls the configured provider (OpenAI in `.env.example`), validates the structured lesson, and returns an equation, explanation, parameter controls and an interactive visualization. AI-generated content can be incorrect; each lesson displays its assumptions and limitations. Use Save experiment to keep a generated lesson and its current slider settings in Saved experiments. Saved lessons reopen without another API call, including after a browser refresh; storage is local to that browser.
 
-## Secure live generation
+## Robot guide: Ask Parallax
+
+The observer robot is a dedicated help button in the header on every screen, separate from the home link. Hover or keyboard focus introduces the guide; click or tap to open it. The large welcome-screen robot has a matching Ask Parallax button. Desktop chat is a nonmodal side panel; mobile chat and help opened from Settings/Saved use a native modal dialog with focus containment and Escape support. Closing preserves this tab's conversation; Clear conversation deletes it. History uses bounded `sessionStorage`, and remains usable in memory if storage is unavailable.
+
+Quick help is answered directly from the versioned app guide. Other questions use hosted **Gemma** via Google AI Studio's API, grounded in that guide plus a small snapshot of the current screen: title, mode, visible error, control labels/values, readouts and saved count. It does not send the full DOM, stored experiments, API keys or account details. Each answer identifies its source. Suggested actions can fill a question without submitting, open the library or saved experiments, show learning modes, open settings, or highlight a real control. These actions run only when clicked and cannot execute arbitrary model code or change experiment parameters.
+
+Add these **server-only** Vercel environment variables for **Production** and **Preview**, then redeploy:
+
+| Variable | Value | Required |
+|---|---|---|
+| `PARALLAX_HELP_API_KEY` | API key from [Google AI Studio](https://aistudio.google.com/apikey) with access to hosted Gemma | For AI help answers |
+| `PARALLAX_HELP_MODEL` | `gemma-4-26b-a4b-it` | Optional; this is the default |
+
+`gemma-4-31b-it` is also supported. Model access and quotas depend on the Google project; this does not imply unlimited or free usage. Google hosts these Gemma models through the Gemini API transport; the configured model is Gemma. See [Google's hosted Gemma documentation](https://ai.google.dev/gemma/docs/core/gemma_on_gemini_api). `GET /api/help` reports the model and whether its key is configured without revealing credentials. Basic quick help works without a key; other questions show a recoverable setup error until configured.
+
+The helper uses only `PARALLAX_HELP_API_KEY`. It never reuses lesson-generation credentials or falls back to OpenAI/Gemini models. Keep the existing `PARALLAX_PROVIDER`, `PARALLAX_API_KEY` and `PARALLAX_MODEL` settings for lesson generation. Never add a `VITE_` prefix to either secret. Local `.env.local` uses the same helper variable names; Vite's API middleware, the Node server, and `api/help.mjs` on Vercel share the same handler. Requests have bounded history/context, same-origin checks, a 35-second timeout, cancellation, and basic per-instance request/concurrency limits; these are not a distributed rate limiter.
+
+## Lesson generation configuration
 
 Generated lessons now use a versioned experiment contract: a learning objective, central intuition, misconception, connected equation terms, fixed constants, computed outputs, presets, a prediction/reveal challenge and a guided sequence. The UI provides Quick intuition, Explain & explore and Build from basics without regenerating the lesson. Symbol selection connects the equation, control and scene; pinned values support before/after comparisons. Shared comparison and spring renderers use the same colors and controls as the authored lessons, with an optional graph and readable compact views.
 

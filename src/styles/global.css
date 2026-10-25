@@ -256,6 +256,60 @@ kbd { font-family: var(--font-mono); font-size: 12px; border: 1px solid var(--ru
 .concept-help-examples li + li { margin-top: 4px; }
 .concept-help .concept-help-mode { margin-bottom: 0; color: var(--text-2); }
 .concept-help-mode strong { color: var(--text); font-weight: 500; }
+
+/* The observer doubles as a guide; its launcher is separate from the home link. */
+.robot-help-launcher { position: relative; flex: none; }
+.robot-help-trigger { position: relative; display: grid; place-items: center; width: 44px; height: 44px; padding: 4px; background: #13241b; color: var(--lime); border: 1px solid var(--rule); }
+.robot-help-trigger:hover, .robot-help-trigger.active { border-color: var(--lime); background: var(--lime-dim); }
+.robot-help-dot { position: absolute; right: -4px; bottom: -3px; display: grid; place-items: center; width: 15px; height: 15px; color: var(--bg); background: var(--lime); font: 14px var(--font-display); border: 1px solid var(--bg); }
+.robot-help-preview { position: absolute; top: calc(100% + 10px); right: 0; width: 280px; max-width: calc(100vw - 32px); padding: 18px; background: #15271ff7; color: var(--text); border: 1px solid var(--control); box-shadow: 0 12px 36px #0006; }
+.robot-help-preview strong { color: var(--ice); font-size: 17px; }
+.robot-help-preview p { font-size: 14px; line-height: 1.5; margin: 8px 0 12px; }
+.observer-chat-invite { position: absolute; right: 16px; bottom: 16px; z-index: 3; background: #102019e8; }
+.robot-guide-dialog { position: fixed; inset: calc(var(--topbar-h) + 12px) 12px 12px auto; margin: 0; width: min(390px, calc(100vw - 24px)); max-width: none; height: calc(100dvh - var(--topbar-h) - 24px); max-height: none; padding: 0; border: 1px solid var(--control); background: #101e18; color: var(--text); box-shadow: -12px 0 64px #0005, inset 0 1px #c3f86b15; z-index: 60; overflow: hidden; }
+.robot-guide-dialog[open] { display: flex; flex-direction: column; }
+.robot-guide-dialog::backdrop { background: #030b07a8; backdrop-filter: blur(3px); }
+.guide-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 14px 16px; border-bottom: 1px solid var(--rule); flex: none; }
+.guide-header h2 { font: 32px var(--font-display); margin: 0; }
+.guide-header .instrument-label { font-size: 10px; }
+.guide-header .row { flex-wrap: nowrap; gap: 0; }
+.guide-header .icon-btn { width: 44px; height: 44px; }
+.guide-context { flex: none; color: var(--ice); margin: 0; padding: 10px 16px; font-size: 12px; border-bottom: 1px solid var(--rule); overflow-wrap: anywhere; }
+.guide-conversation { flex: 1; min-height: 80px; overflow-y: auto; overscroll-behavior: contain; padding: 18px 16px; }
+.guide-welcome { padding: 16px 0; }
+.guide-welcome > span { color: var(--lime); font-size: 28px; }
+.guide-welcome h3 { font: 29px var(--font-display); margin: 10px 0; }
+.guide-welcome p { font-size: 15px; color: var(--text-2); line-height: 1.5; }
+.guide-message { margin: 0 0 18px; padding: 12px 14px; border: 1px solid #8eae8838; background: #182b2266; overflow-wrap: anywhere; }
+.guide-message.user { margin-left: 24px; background: #c3c0f20b; border-color: #c3c0f238; }
+.guide-speaker { display: block; margin-bottom: 6px; color: var(--ice); font: 11px var(--font-mono); text-transform: uppercase; letter-spacing: .05em; }
+.guide-message.user .guide-speaker { color: var(--violet); }
+.guide-answer { white-space: pre-wrap; font-size: 14px; line-height: 1.65; }
+.guide-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.guide-actions .btn { white-space: normal; text-align: left; font-size: 12px; }
+.guide-source { display: block; color: var(--text-2); font-size: 10px; margin-top: 10px; }
+.guide-pending { margin: 0; color: var(--ice); font: 13px var(--font-mono); }
+.guide-error { padding: 12px; border: 1px solid var(--amber); font-size: 13px; }
+.guide-error p { margin-bottom: 8px; }
+.guide-suggestions { display: flex; flex-wrap: wrap; flex: none; gap: 6px; padding: 10px 16px; border-top: 1px solid var(--rule); }
+.guide-suggestions button { min-height: 34px; padding: 6px 9px; text-align: left; background: none; border: 1px solid var(--rule); color: var(--text-2); font-size: 12px; line-height: 1.4; }
+.guide-suggestions button:hover:not(:disabled) { color: var(--lime); border-color: var(--lime); }
+.guide-composer { display: flex; align-items: flex-end; flex: none; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--rule); }
+.guide-composer textarea { flex: 1; min-width: 0; min-height: 72px; max-height: 140px; resize: vertical; padding: 10px; border: 1px solid var(--control); background: #0a1511; font-size: 15px; line-height: 1.5; }
+.guide-composer .btn { padding: 0 10px; font-size: 13px; }
+.guide-footnote { flex: none; margin: 0; padding: 0 16px 12px; font-size: 10px; line-height: 1.5; color: var(--text-2); }
+.guide-highlight { outline: 2px solid var(--lime); outline-offset: 4px; box-shadow: 0 0 22px #c3f86b26; }
+@media (max-width: 700px) {
+  .robot-guide-dialog { inset: 12px 8px 8px; width: calc(100vw - 16px); height: calc(100dvh - 20px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .robot-help-preview { position: fixed; top: calc(var(--topbar-h) + 8px); left: auto; right: 12px; }
+  .guide-suggestions { max-height: 120px; overflow-y: auto; }
+  .observer-chat-invite { right: 10px; bottom: 10px; }
+}
+@media (max-width: 380px) {
+  .topbar { padding: 0 12px; gap: 8px; }
+  .topbar .wordmark-text { font-size: 24px; letter-spacing: -.025em; }
+  .topnav { gap: 0; }
+}
 .entry-form .mode-selector .field-label { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-2); }
 .entry-form .mode-desc { display: none; }
 .entry-form .mode-options { gap: 0; border: 1px solid var(--control); }

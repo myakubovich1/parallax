@@ -2,7 +2,7 @@ import { EGGS, foundEggs } from '../lib/eggs';
 import { useSettings, type MotionPref } from '../lib/settings';
 import { Dialog } from './Dialog';
 
-export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function SettingsDialog({ open, onClose, onHelp }: { open: boolean; onClose: () => void; onHelp?: (trigger: HTMLElement) => void }) {
   const { effects, setEffects, motion, setMotion, reducedMotion } = useSettings();
   const motions: { id: MotionPref; label: string; desc: string }[] = [
     { id: 'system', label: 'Follow system', desc: `Currently ${reducedMotion && motion === 'system' ? 'reduced' : 'full'}` },
@@ -40,6 +40,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
       {foundEggs().length > 0 && (
         <p className="muted small egg-count">◆ Easter eggs found: {foundEggs().length} of {Object.keys(EGGS).length}</p>
       )}
+      {onHelp && <button type="button" className="link-btn" onClick={event => onHelp(event.currentTarget)}>Ask Parallax about settings →</button>}
     </Dialog>
   );
 }

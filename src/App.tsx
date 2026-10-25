@@ -2,6 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { SavedDialog } from './components/SavedDialog';
 import { SettingsDialog } from './components/SettingsDialog';
 import { TopBar } from './components/TopBar';
+import { HelpAssistant } from './components/HelpAssistant';
+import { readGuideContext, type GuideAction } from './lib/help';
 import { PhosphorBackground } from './components/PhosphorBackground';
 import { EggCaption } from './components/EggCaption';
 import { cueRobot, isMassEnergy, listenForKeyEggs, revealEgg, setOverdrive } from './lib/eggs';
@@ -38,6 +40,9 @@ export default function App() {
   const [saved, setSaved] = useState<SavedExperiment[]>(loadSaved);
   const [dialog, setDialog] = useState<'saved' | 'settings' | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const helpTrigger = useRef<HTMLElement | null>(null);
+  const helpHighlight = useRef<{node: HTMLElement; timer: number} | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const keyRef = useRef(1);
@@ -181,15 +186,59 @@ export default function App() {
     setToast(ok ? 'Saved to this browser. Find it in Saved experiments.' : 'Couldn’t save: this browser’s storage is unavailable.');
   };
 
+  const getHelpContext = useCallback(() => readGuideContext(saved.length), [saved.length]);
+  const openHelp = useCallback((trigger: HTMLElement) => {
+    helpTrigger.current = trigger;
+    setHelpOpen(true);
+    requestAnimationFrame(() => document.getElementById('guide-question')?.focus());
+  }, []);
+  const closeHelp = useCallback(() => {
+    setHelpOpen(false);
+    requestAnimationFrame(() => {
+      const trigger = helpTrigger.current;
+      if (trigger?.isConnected) trigger.focus(); else document.querySelector<HTMLButtonElement>('.robot-help-trigger')?.focus();
+    });
+  }, []);
+  useEffect(() => () => {
+    if (helpHighlight.current) {clearTimeout(helpHighlight.current.timer); helpHighlight.current.node.classList.remove('guide-highlight');}
+  }, []);
+  const guideAction = (action: GuideAction) => {
+    setHelpOpen(false);
+    setDialog(null);
+    if (action.type === 'fill-question') {
+      goEntry(true); setPrompt(action.question); setError(null);
+    } else if (action.type === 'open-library') {
+      goEntry();
+      requestAnimationFrame(() => {
+        const toggle = document.querySelector<HTMLButtonElement>('.library-toggle');
+        if (toggle?.getAttribute('aria-expanded') !== 'true') toggle?.click();
+        toggle?.scrollIntoView({block: 'start', behavior: 'instant'});
+        toggle?.focus();
+      });
+    } else if (action.type === 'open-saved') setDialog('saved');
+    else if (action.type === 'open-settings') setDialog('settings');
+    else requestAnimationFrame(() => {
+      const context = readGuideContext(saved.length);
+      const target = action.type === 'highlight-control' && context.controls.some(c => c.id === action.controlId) ? document.getElementById(action.controlId) : action.type === 'show-modes' ? document.querySelector<HTMLElement>('#main .mode-selector input:checked') : null;
+      if (!target) {setToast('That control isn’t on this screen. Open its experiment and ask again.'); return;}
+      if (helpHighlight.current) {clearTimeout(helpHighlight.current.timer); helpHighlight.current.node.classList.remove('guide-highlight');}
+      target.scrollIntoView({block: 'center', behavior: 'instant'}); target.focus();
+      const node = target.closest<HTMLElement>('.param, .catalog-param, .mode-selector') ?? target;
+      node.classList.add('guide-highlight');
+      helpHighlight.current = {node, timer: window.setTimeout(() => {node.classList.remove('guide-highlight'); helpHighlight.current = null;}, 3500)};
+    });
+  };
+
   return (
     <div className="app">
       <PhosphorBackground />
       <EggCaption />
       <a className="skip" href="#main">Skip to content</a>
-      <TopBar onHome={() => goEntry()} onNew={() => { setPrompt(''); setError(null); goEntry(true); }} onSaved={() => setDialog('saved')} onSettings={() => setDialog('settings')} savedCount={saved.length} docked={screen.kind !== 'entry'} />
+      <TopBar onHome={() => goEntry()} onNew={() => { setPrompt(''); setError(null); goEntry(true); }} onSaved={() => setDialog('saved')} onSettings={() => setDialog('settings')} savedCount={saved.length} docked={screen.kind !== 'entry'} helpOpen={helpOpen} onHelp={openHelp} />
 
       {screen.kind === 'entry' ? (
         <EntryScreen
+          onHelp={openHelp}
           ref={inputRef}
           prompt={prompt}
           onPrompt={(v) => { setPrompt(v); if (error) setError(null); if (gen.status === 'unsupported' || gen.status === 'failed' || gen.status === 'confirmation') setGen({ status: 'idle' }); }}
@@ -230,6 +279,7 @@ export default function App() {
       )}
 
       <SavedDialog
+        onHelp={openHelp}
         open={dialog === 'saved'}
         onClose={() => setDialog(null)}
         items={saved}
@@ -250,7 +300,8 @@ export default function App() {
         }}
         onDelete={(id) => persist(saved.filter((s) => s.id !== id))}
       />
-      <SettingsDialog open={dialog === 'settings'} onClose={() => setDialog(null)} />
+      <SettingsDialog open={dialog === 'settings'} onClose={() => setDialog(null)} onHelp={openHelp} />
+      <HelpAssistant open={helpOpen} onClose={closeHelp} pageKey={`${screen.kind}:${'key' in screen ? screen.key : 0}:${dialog}:${gen.status}:${error ?? ''}`} getContext={getHelpContext} onAction={guideAction} />
       <div className={`toast ${toast ? 'show' : ''}`} role="status" aria-live="polite">{toast}</div>
     </div>
   );

@@ -46,7 +46,7 @@ function screen(ctx: CanvasRenderingContext2D, r: Rect, g: Geometry, fn: (x: num
 }
 
 /** The observer head, docked beside the wordmark. Follows the cursor anywhere on the page. */
-export function MiniObserver() {
+export function MiniObserver({flight = true}: {flight?: boolean}) {
   const ref = useRef<HTMLCanvasElement>(null);
   const field = useRef<{ f: Field; dpr: number } | null>(null);
   const look = useRef({ yaw: 0, pitch: 0, ty: 0.25, tp: 0.35 });
@@ -100,6 +100,7 @@ export function MiniObserver() {
     const canvas = ref.current;
     if (!canvas) return;
     draw(0);
+    if (!flight) return;
     const arrival = reducedMotion ? null : claimFlight('dock');
     if (arrival?.image) {
       setLanding(true);
