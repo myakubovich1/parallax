@@ -22,7 +22,10 @@ const request = { prompt: 'F = -kx', mode: 'explore' };
 
 test('missing key is reported without contacting provider', async t => {
   const base = await serve(t, { getConfig: () => ({ PARALLAX_PROVIDER: 'openai' }), fetchImpl: () => assert.fail('Provider must not be called') });
-  assert.deepEqual(await (await fetch(`${base}/api/status`)).json(), { provider: 'openai', configured: false });
+  const status = await (await fetch(`${base}/api/status`)).json();
+  assert.equal(status.provider, 'openai');
+  assert.equal(status.configured, false);
+  assert.equal(status.requiredKeyVariable, 'PARALLAX_API_KEY');
   assert.equal((await post(base, request)).status, 503);
 });
 
@@ -81,17 +84,20 @@ test('billing exhaustion is distinguished from temporary rate limits', async t =
 });
 
 
-test('default Gemini mode never calls OpenAI when only an OpenAI key exists', async t => {
-  const base = await serve(t, { getConfig: () => ({ PARALLAX_API_KEY: 'test-only-placeholder' }), fetchImpl: () => assert.fail('No paid fallback permitted') });
-  assert.deepEqual(await (await fetch(`${base}/api/status`)).json(), { provider: 'gemini', configured: false });
+test('default OpenAI mode never switches to Gemini when only a Gemini key exists', async t => {
+  const base = await serve(t, { getConfig: () => ({ PARALLAX_GEMINI_API_KEY: 'test-only-placeholder' }), fetchImpl: () => assert.fail('No provider fallback permitted') });
+  const status = await (await fetch(`${base}/api/status`)).json();
+  assert.equal(status.provider, 'openai');
+  assert.equal(status.providerSource, 'default');
+  assert.equal(status.configured, false);
   const response = await post(base, request);
   assert.equal(response.status, 503);
-  assert.match((await response.json()).error, /PARALLAX_GEMINI_API_KEY/);
+  assert.match((await response.json()).error, /PARALLAX_API_KEY/);
 });
 
 test('Gemini sends key only in server header and validates structured output', async t => {
   let calls = 0;
-  const base = await serve(t, { getConfig: () => ({ PARALLAX_GEMINI_API_KEY: 'gemini-test-placeholder' }), fetchImpl: async (url, options) => {
+  const base = await serve(t, { getConfig: () => ({ PARALLAX_PROVIDER: 'gemini', PARALLAX_GEMINI_API_KEY: 'gemini-test-placeholder' }), fetchImpl: async (url, options) => {
     calls++;
     assert.equal(url, 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent');
     assert.equal(url.includes('key='), false);
@@ -113,7 +119,7 @@ test('Gemini sends key only in server header and validates structured output', a
 test('Gemini quota, blocked and invalid output never fall back to a paid provider', async t => {
   for (const upstream of [Response.json({ error: { message: 'private upstream details' } }, { status: 429 }), Response.json({ candidates: [{ finishReason: 'SAFETY' }] }), Response.json({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: '{}' }] } }] })]) {
     let calls = 0;
-    const base = await serve(t, { getConfig: () => ({ PARALLAX_GEMINI_API_KEY: 'gemini-test-placeholder', PARALLAX_API_KEY: 'openai-test-placeholder' }), fetchImpl: async url => {
+    const base = await serve(t, { getConfig: () => ({ PARALLAX_PROVIDER: 'gemini', PARALLAX_GEMINI_API_KEY: 'gemini-test-placeholder', PARALLAX_API_KEY: 'openai-test-placeholder' }), fetchImpl: async url => {
       calls++;
       assert.ok(url.startsWith('https://generativelanguage.googleapis.com/'));
       return upstream;
@@ -128,10 +134,28 @@ test('Gemini quota, blocked and invalid output never fall back to a paid provide
 });
 
 test('unsupported provider and model are rejected before any network request', async t => {
-  for (const config of [{ PARALLAX_PROVIDER: 'unknown' }, { PARALLAX_GEMINI_MODEL: 'unexpected-model' }]) {
+  for (const config of [{ PARALLAX_PROVIDER: 'unknown' }, { PARALLAX_PROVIDER: 'gemini', PARALLAX_GEMINI_MODEL: 'unexpected-model' }]) {
     const base = await serve(t, { getConfig: () => config, fetchImpl: () => assert.fail('No provider call') });
     assert.equal((await post(base, request)).status, 503);
   }
+});
+
+test('a Vercel deployment with only an OpenAI key uses OpenAI and reports safe diagnostics', async t => {
+  const config = {PARALLAX_API_KEY: 'test-secret-not-for-browser', VERCEL_ENV: 'production', VERCEL_GIT_COMMIT_SHA: 'example-deployment-sha'};
+  let calls = 0;
+  const base = await serve(t, {getConfig: () => config, fetchImpl: async (url, options) => {
+    calls++;
+    assert.equal(url, 'https://api.openai.com/v1/chat/completions');
+    assert.equal(JSON.parse(options.body).model, 'gpt-5.6-sol');
+    return Response.json({choices: [{finish_reason: 'stop', message: {content: JSON.stringify(experiment)}}]});
+  }});
+  const response = await fetch(`${base}/api/status`);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  const status = await response.json();
+  assert.deepEqual(status, {provider: 'openai', model: 'gpt-5.6-sol', configured: true, providerSource: 'default', requiredKeyVariable: 'PARALLAX_API_KEY', lessonSchemaVersion: 2, deployment: {environment: 'production', commit: 'example-deployment-sha'}});
+  assert.equal(JSON.stringify(status).includes(config.PARALLAX_API_KEY), false);
+  assert.equal((await post(base, request)).status, 200);
+  assert.equal(calls, 1);
 });
 
 test('serverless pre-parsed body and x-forwarded-host are accepted', async () => {
