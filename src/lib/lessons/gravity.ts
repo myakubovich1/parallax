@@ -169,6 +169,6 @@ export const gravityLesson: LessonSpec = {
     { id: 'arrows', label: 'Force arrows' },
     { id: 'separation', label: 'Separation' },
   ],
-  matchers: [/gravit/i, /newton'?s?\s+law/i, /\bF\s*=\s*G/i, /m_?1\s*[·*]?\s*m_?2/i, /inverse[-\s]square/i, /attract/i, /\bmasses\b/i],
+  matchers: [/gravit/i, /newton'?s?\s+law/i, /\bnewton'?s?\s+apple|\bapples?\b.*\bfall|\bfall\w*\b.*\bapples?\b/i, /\bF\s*=\s*G/i, /m_?1\s*[·*]?\s*m_?2/i, /inverse[-\s]square/i, /attract/i, /\bmasses\b/i],
   examplePrompt: 'F = G m1 m2 / r²',
 };

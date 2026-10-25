@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MathText } from '../components/MathText';
 import { fixed } from '../lib/format';
 import { TONE_GLYPH, type ParamDef, type TermTone } from '../lib/lessons/types';
@@ -15,6 +15,24 @@ interface Props {
 export function ParameterControl({ def, value, tone, active, onChange, onFocusTerm }: Props) {
   const [draft, setDraft] = useState(fixed(value, def.digits));
   useEffect(() => setDraft(fixed(value, def.digits)), [value, def.digits]);
+  // While the thumb is held, the pointer often drifts off the panel; leaving must not clear the
+  // linked highlight, or every crossing toggles state elsewhere on the page mid-drag.
+  const dragging = useRef(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const release = () => {
+      if (!dragging.current) return;
+      dragging.current = false;
+      const wrap = wrapRef.current;
+      if (wrap && !wrap.matches(':hover') && !wrap.contains(document.activeElement)) onFocusTerm(null);
+    };
+    window.addEventListener('pointerup', release);
+    window.addEventListener('pointercancel', release);
+    return () => {
+      window.removeEventListener('pointerup', release);
+      window.removeEventListener('pointercancel', release);
+    };
+  }, [onFocusTerm]);
   const unitText = def.unit ? ` ${def.unit}` : '';
   const commit = () => {
     const v = parseFloat(draft.replace(',', '.'));
@@ -25,8 +43,12 @@ export function ParameterControl({ def, value, tone, active, onChange, onFocusTe
     <div
       className={`param tone-${tone} ${active ? 'active' : ''}`}
       id={`param-${def.id}`}
+      ref={wrapRef}
       onMouseEnter={() => onFocusTerm(def.term)}
-      onMouseLeave={() => onFocusTerm(null)}
+      onMouseLeave={(e) => {
+        if (dragging.current || e.currentTarget.contains(document.activeElement)) return;
+        onFocusTerm(null);
+      }}
     >
       <div className="param-head">
         <label htmlFor={`range-${def.id}`} className="param-label">
@@ -58,8 +80,14 @@ export function ParameterControl({ def, value, tone, active, onChange, onFocusTe
         aria-valuetext={`${fixed(value, def.digits)}${unitText}`}
         aria-describedby={`hint-${def.id}`}
         onChange={(e) => onChange(parseFloat(e.target.value))}
+        onPointerDown={() => {
+          dragging.current = true;
+          onFocusTerm(def.term);
+        }}
         onFocus={() => onFocusTerm(def.term)}
-        onBlur={() => onFocusTerm(null)}
+        onBlur={() => {
+          if (!dragging.current) onFocusTerm(null);
+        }}
         style={{ '--fill': `${((value - def.min) / (def.max - def.min)) * 100}%` } as React.CSSProperties}
       />
       <div className="param-foot" id={`hint-${def.id}`}>

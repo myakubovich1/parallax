@@ -3,6 +3,7 @@ import { evaluateLesson, parameterValues } from '../../server/lesson-engine.mjs'
 import { InstrumentFrame } from '../components/InstrumentFrame';
 import { ModeSelector } from '../components/ModeSelector';
 import { MathText } from '../components/MathText';
+import { StableSwap } from '../components/StableSwap';
 import { Icon } from '../components/Icon';
 import type { ExperimentLesson, LearningMode, Params, TermTone } from '../lib/lessons/types';
 import { ExperimentStage, quantity } from '../renderers/ExperimentStage';
@@ -49,7 +50,7 @@ export function ExperimentWorkspace({
   const input = lesson.params.find((p) => p.id === lesson.renderer.inputId)!;
   const inputRatio = reference[input.id] ? params[input.id] / reference[input.id] : null;
   const outputRatio = pinned[primary.id].si ? results[primary.id].si / pinned[primary.id].si : null;
-  const term = [
+  const terms = [
     ...lesson.params.map((p, i) => ({
       id: p.id,
       symbol: p.symbol,
@@ -77,7 +78,8 @@ export function ExperimentWorkspace({
       role: 'Computed result',
       tone: 'ice' as TermTone,
     })),
-  ].find((t) => t.id === focused);
+  ];
+  const term = terms.find((t) => t.id === focused);
 
   const apply = (next: Params, message: string) => {
     try {
@@ -287,33 +289,48 @@ export function ExperimentWorkspace({
                 ),
               )}
             </div>
-            <div className="experiment-term" aria-live="polite">
-              {term ? (
-                <>
-                  <span className={`instrument-label tone-${term.tone}`}>{term.role}</span>
-                  <strong>
-                    <MathText text={term.symbol} /> · {term.name} · {term.value}
-                  </strong>
-                  <p>{term.meaning}</p>
-                  {lesson.params.some((p) => p.id === term.id) && (
-                    <button
-                      className="link-btn"
-                      onClick={() => {
-                        setMode('explore');
-                        setTab('experiment');
-                        requestAnimationFrame(() => document.getElementById(`range-${term.id}`)?.focus());
-                      }}
-                    >
-                      Adjust this variable →
-                    </button>
-                  )}
-                </>
-              ) : (
-                <p className="muted">
-                  Select a symbol to see its meaning, unit, value, and connection to the picture.
-                </p>
-              )}
-            </div>
+            {/* All term cards share one cell, so focusing a slider never changes the column's height. */}
+            <StableSwap
+              className="experiment-term"
+              active={term?.id ?? '__none'}
+              items={[
+                {
+                  key: '__none',
+                  node: (
+                    <p className="muted">
+                      Select a symbol to see its meaning, unit, value, and connection to the picture.
+                    </p>
+                  ),
+                },
+                ...terms.map((t) => ({
+                  key: t.id,
+                  node: (
+                    <>
+                      <span className={`instrument-label tone-${t.tone}`}>{t.role}</span>
+                      <strong>
+                        <MathText text={t.symbol} /> · {t.name} · {t.value}
+                      </strong>
+                      <p>{t.meaning}</p>
+                      {lesson.params.some((p) => p.id === t.id) && (
+                        <button
+                          className="link-btn"
+                          onClick={() => {
+                            setMode('explore');
+                            setTab('experiment');
+                            requestAnimationFrame(() => document.getElementById(`range-${t.id}`)?.focus());
+                          }}
+                        >
+                          Adjust this variable →
+                        </button>
+                      )}
+                    </>
+                  ),
+                })),
+              ]}
+            />
+            <p className="sr-only" aria-live="polite">
+              {term ? `${term.name}: ${term.value}. ${term.meaning}` : ''}
+            </p>
           </InstrumentFrame>
 
           <InstrumentFrame title="What changed?" className="experiment-feedback">

@@ -4,6 +4,7 @@ import { Icon } from '../components/Icon';
 import { ModeSelector } from '../components/ModeSelector';
 import { InstrumentFrame } from '../components/InstrumentFrame';
 import { MathText } from '../components/MathText';
+import { StableSwap } from '../components/StableSwap';
 import { displayEquation, symbol } from '../lib/catalog/display';
 import { formatValue, type Formula } from '../lib/catalog/formulas';
 import type { LearningMode, Params } from '../lib/lessons/types';
@@ -132,11 +133,15 @@ export function CatalogWorkspace({
                 </button>
               ))}
             </div>
-            <p className="catalog-term-help">
-              {active
-                ? `${active.label}: ${active.hint}`
-                : 'The colors link each adjustable variable to its measurement in the scene.'}
-            </p>
+            {/* Every hint is laid out at once, so hovering a control never changes this height. */}
+            <StableSwap
+              className="catalog-term-help"
+              active={active?.id ?? '__none'}
+              items={[
+                { key: '__none', node: 'The colors link each adjustable variable to its measurement in the scene.' },
+                ...f.params.map((d) => ({ key: d.id, node: `${d.label}: ${d.hint}` })),
+              ]}
+            />
           </InstrumentFrame>
           <div className="catalog-comparison frame">
             <div>

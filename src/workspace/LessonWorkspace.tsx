@@ -6,6 +6,7 @@ import { LESSONS, sanitizeParams } from '../lib/lessons/registry';
 import type { ConceptId, LearningMode, LessonSpec, Params, Prediction } from '../lib/lessons/types';
 import { useSettings } from '../lib/settings';
 import { revealEgg } from '../lib/eggs';
+import { NewtonNote } from '../components/NewtonNote';
 import { EquationStrip } from './EquationStrip';
 import { FollowUpInput, type FollowUpReply } from './FollowUpInput';
 import { Inspector, type Tab } from './Inspector';
@@ -343,6 +344,7 @@ export function LessonWorkspace({ lesson, initialMode, initialParams, onExit, on
           onTogglePin={(id) => setPinnedTerm((p) => (p === id ? null : id))}
           onJumpToControl={jumpToControl}
         />
+        {lesson.id === 'gravitational-attraction' && <NewtonNote onTryIt={() => runFollowUp('double the distance')} />}
         <section className="explain" aria-label="What this shows">
           <p className="explain-now"><span className="instrument-label">What this shows</span> {lesson.caption(params, ctx)}</p>
           <p className="explain-change" aria-live="polite">

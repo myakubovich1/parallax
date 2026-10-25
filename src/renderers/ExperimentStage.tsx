@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { evaluateLesson } from '../../server/lesson-engine.mjs';
 import type { ExperimentLesson, Params } from '../lib/lessons/types';
 
@@ -23,16 +23,20 @@ export function ExperimentStage({
   focused: string | null;
   graph: boolean;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(640);
+  // Compact and wide layouts are different elements, so observe whichever one is mounted.
+  // The 40 px dead zone stops the two layouts (which differ in height) from flipping back and
+  // forth when a scrollbar or sibling change nudges the width across a single threshold.
+  const [node, ref] = useState<HTMLDivElement | null>(null);
+  const [compact, setCompact] = useState(false);
   useEffect(() => {
-    const node = ref.current;
     if (!node) return;
-    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    const observer = new ResizeObserver(([entry]) => {
+      const w = entry.contentRect.width;
+      setCompact((c) => (c ? w < 540 : w < 500));
+    });
     observer.observe(node);
     return () => observer.disconnect();
-  }, []);
-  const compact = width < 520;
+  }, [node]);
   const input = lesson.params.find((p) => p.id === lesson.renderer.inputId)!;
   const output = lesson.outputs.find((o) => o.id === lesson.renderer.outputId)!;
   const current = evaluateLesson(lesson, params)[output.id];

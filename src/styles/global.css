@@ -1336,3 +1336,91 @@ input[type='range']:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(
 .equation-review-actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:20px; align-items:center; }
 .equation-review-actions .btn { max-width:100%; white-space:normal; padding-top:10px; padding-bottom:10px; }
 .catalog-control-heading output,.catalog-readout strong,.param-number input { font-variant-numeric:tabular-nums; }
+
+/* ── Slider stability ─────────────────────────────────────────────────────────
+   Nothing may change size or position while a slider is being dragged: a layout shift can move
+   the control out from under the pointer, flip hover/focus state and shake the panel. */
+
+/* Swappable hover/focus panels reserve the height of their tallest variant. */
+.stable-swap { display: grid; }
+.stable-swap > .stable-swap-item { grid-area: 1 / 1; min-width: 0; }
+.stable-swap > .stable-swap-item:not([data-active]) { visibility: hidden; }
+.experiment-term > .stable-swap-item { display: grid; gap: 8px; align-content: start; }
+.experiment-term > .stable-swap-item > :is(p, strong, span) { margin: 0; }
+.experiment-term > .stable-swap-item .link-btn { justify-self: start; }
+
+/* Side columns that scroll: corner marks sit inside (outside, they made the column scrollable by a
+   phantom 5 px on large screens), the scrollbar gutter is always reserved so content width never
+   changes, and overscroll does not bounce or chain to the page. */
+:is(.inspector, .experiment-inspector, .catalog-inspector) { scrollbar-gutter: stable; overscroll-behavior: contain; }
+:is(.inspector, .experiment-inspector, .catalog-inspector) > .reg.tl { top: 0; left: 0; }
+:is(.inspector, .experiment-inspector, .catalog-inspector) > .reg.tr { top: 0; right: 0; }
+:is(.inspector, .experiment-inspector, .catalog-inspector) > .reg.bl { bottom: 0; left: 0; }
+:is(.inspector, .experiment-inspector, .catalog-inspector) > .reg.br { bottom: 0; right: 0; }
+
+/* Explanations that change with every value keep a fixed footprint. */
+.explain-now { min-height: calc(2 * 1.6em); }
+.explain-change { min-height: calc(2 * 1.6em); }
+.experiment-feedback > p[role='status'] { min-height: calc(2 * 1.55em); }
+.term-value, .param-value, .param-number input, .experiment-readout strong { font-variant-numeric: tabular-nums; }
+@media (max-width: 1099px) {
+  .explain-now, .explain-change { min-height: calc(3 * 1.6em); }
+}
+
+/* ── Newton field note (gravitation lesson) ─────────────────────────────────── */
+.newton-note { padding: 0; overflow: hidden; }
+.newton-note-toggle {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  padding: 12px 20px 12px 12px;
+  background: none;
+  border: 0;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.newton-note-toggle:hover .newton-note-cta { text-decoration: underline; text-underline-offset: 4px; }
+.newton-note-text { display: grid; gap: 6px; }
+.newton-note-text strong { font-family: var(--font-display); font-size: 20px; font-weight: 500; }
+.newton-note-cta { color: var(--lime); font-family: var(--font-mono); font-size: 14px; }
+.newton-scene { width: 100%; height: auto; display: block; background: radial-gradient(ellipse at 50% 30%, rgba(195, 248, 107, 0.06), transparent 70%); border: 1px solid var(--rule); }
+.newton-note-panel { padding: 4px 24px 22px; border-top: 1px solid var(--rule); animation: fade-in var(--t-med) ease-out; }
+.newton-note-panel h3 { font-family: var(--font-display); font-size: 18px; margin: 18px 0 8px; }
+.newton-note-panel p { margin: 0 0 12px; max-width: 72ch; line-height: 1.6; }
+.newton-note-math { font-family: var(--font-mono); color: var(--text); padding: 8px 12px; border-left: 2px solid var(--amber); background: var(--bg); display: inline-block; }
+.newton-note-math strong { color: var(--amber); }
+.newton-note-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+@media (max-width: 719px) {
+  .newton-note-toggle { grid-template-columns: 1fr; padding: 12px; }
+  .newton-note-panel { padding: 4px 16px 18px; }
+}
+
+/* The loop: hang, fall (accelerating), bounce off the wig, roll away; the idea glows in. */
+.newton-apple { animation: newton-apple 6s infinite; }
+.newton-head { animation: newton-head 6s infinite; }
+.newton-bang { opacity: 0; animation: newton-bang 6s infinite; }
+.newton-idea { opacity: 0; animation: newton-idea 6s infinite; }
+@keyframes newton-apple {
+  0%, 22% { transform: translate(0, 0); opacity: 1; animation-timing-function: cubic-bezier(0.5, 0, 1, 0.6); }
+  34% { transform: translate(0, 30px); animation-timing-function: ease-out; }
+  41% { transform: translate(9px, 18px); animation-timing-function: cubic-bezier(0.5, 0, 1, 0.6); }
+  52% { transform: translate(24px, 72px); animation-timing-function: ease-out; }
+  66% { transform: translate(44px, 72px); opacity: 1; }
+  86% { transform: translate(44px, 72px); opacity: 1; }
+  92%, 100% { transform: translate(44px, 72px); opacity: 0; }
+}
+@keyframes newton-head {
+  0%, 33% { transform: translate(0, 0); }
+  35% { transform: translate(-1px, 2px); }
+  40%, 100% { transform: translate(0, 0); }
+}
+@keyframes newton-bang { 0%, 33% { opacity: 0; } 35%, 55% { opacity: 1; } 60%, 100% { opacity: 0; } }
+@keyframes newton-idea { 0%, 50% { opacity: 0; } 60%, 84% { opacity: 1; } 92%, 100% { opacity: 0; } }
+[data-effects='on'] .newton-idea { filter: drop-shadow(0 0 4px rgba(195, 248, 107, 0.6)); }
+/* Reduced motion: a single still frame of the moment, the apple resting on the wig. */
+[data-motion='reduce'] .newton-apple { animation: none; transform: translate(0, 30px); }
+[data-motion='reduce'] :is(.newton-head, .newton-bang, .newton-idea) { animation: none; }
+[data-motion='reduce'] :is(.newton-bang, .newton-idea) { opacity: 1; }

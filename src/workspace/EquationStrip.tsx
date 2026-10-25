@@ -1,4 +1,5 @@
 import { MathText } from '../components/MathText';
+import { StableSwap } from '../components/StableSwap';
 import { InstrumentFrame } from '../components/InstrumentFrame';
 import { TONE_GLYPH, type LessonContext, type LessonSpec, type Params } from '../lib/lessons/types';
 
@@ -48,27 +49,38 @@ export function EquationStrip({ lesson, params, ctx, focused, pinned, onHover, o
         ))}
       </div>
       <div className={`term-card ${term ? `tone-${term.tone}` : 'empty'}`}>
-        {term ? (
-          <>
-            <div className="term-head">
-              <span className="term-glyph" aria-hidden="true">{TONE_GLYPH[term.tone]}</span>
-              <span className="term-sym"><MathText text={term.symbol} /></span>
-              <span className="term-name">{term.name}</span>
-              {term.value && <span className="term-value">{term.value(params, ctx)}</span>}
-            </div>
-            <p className="term-meaning">
-              {term.meaning}
-              {term.unit && <span className="term-unit"> Unit: {term.unit}.</span>}
-            </p>
-            {term.param && (
-              <button type="button" className="link-btn" onClick={() => onJumpToControl(term.param!)}>
-                Adjust <MathText text={term.symbol} /> →
-              </button>
-            )}
-          </>
-        ) : (
-          <p className="term-meaning muted">Hover, tab to or select any term to see its meaning, unit and current value, and where it lives in the picture.</p>
-        )}
+        {/* Every term's card is laid out at once so hovering a term or slider never changes the height. */}
+        <StableSwap
+          active={term?.id ?? '__none'}
+          items={[
+            {
+              key: '__none',
+              node: <p className="term-meaning muted">Hover, tab to or select any term to see its meaning, unit and current value, and where it lives in the picture.</p>,
+            },
+            ...Object.values(lesson.terms).map((t) => ({
+              key: t.id,
+              node: (
+                <div className={`tone-${t.tone}`}>
+                  <div className="term-head">
+                    <span className="term-glyph" aria-hidden="true">{TONE_GLYPH[t.tone]}</span>
+                    <span className="term-sym"><MathText text={t.symbol} /></span>
+                    <span className="term-name">{t.name}</span>
+                    {t.value && <span className="term-value">{t.value(params, ctx)}</span>}
+                  </div>
+                  <p className="term-meaning">
+                    {t.meaning}
+                    {t.unit && <span className="term-unit"> Unit: {t.unit}.</span>}
+                  </p>
+                  {t.param && (
+                    <button type="button" className="link-btn" onClick={() => onJumpToControl(t.param!)}>
+                      Adjust <MathText text={t.symbol} /> →
+                    </button>
+                  )}
+                </div>
+              ),
+            })),
+          ]}
+        />
       </div>
     </InstrumentFrame>
   );
