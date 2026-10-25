@@ -127,9 +127,9 @@ function GenerationStatus({ gen, onCancel, onRetry, onOpenLesson }: Pick<Props, 
     <div className="gen-status frame unsupported" role="status">
       <span className="reg tl" aria-hidden="true" />
       <span className="reg br" aria-hidden="true" />
-      <p className="instrument-label">Not available in demo mode</p>
+      <p className="instrument-label">Couldn’t build this experiment</p>
       <p>
-        Live lesson generation isn’t connected, so Parallax can’t build an experiment for “{gen.prompt.length > 80 ? `${gen.prompt.slice(0, 80)}…` : gen.prompt}” yet. These three lessons are available:
+        Parallax couldn’t turn “{gen.prompt.length > 80 ? `${gen.prompt.slice(0, 80)}…` : gen.prompt}” into an experiment. Try phrasing it as a formula or a question, or open one of these example lessons:
       </p>
       <div className="examples">
         {LESSONS.map((l) => (

@@ -28,11 +28,11 @@ await p.click('.examples .chip:has-text("Gravitational attraction")');
 check('Example button fills input', (await val(p, '#concept')).includes('F = G'));
 check('Default mode is Explain & explore', await p.isChecked('input[name=mode][value=explore]'));
 expectedMissingKey = true;
-await p.route('**/api/generate', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Configure PARALLAX_GEMINI_API_KEY securely in environment settings.' }) }));
+await p.route('**/api/generate', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Configure PARALLAX_API_KEY securely in environment settings.' }) }));
 await p.fill('#concept', 'Explain photosynthesis');
 await p.click('button:has-text("Create experiment")');
 await p.waitForSelector('.gen-status.failed');
-check('Custom input explains missing server configuration', (await text(p, '.gen-status.failed')).includes('Configure PARALLAX_GEMINI_API_KEY'));
+check('Custom input explains missing server configuration', (await text(p, '.gen-status.failed')).includes('Configure PARALLAX_API_KEY'));
 await p.unroute('**/api/generate');
 expectedMissingKey = false;
 await p.fill('#concept', 'Why does gradient descent sometimes overshoot?');
@@ -76,7 +76,7 @@ check('Follow-up "Make the waves cancel" sets cancellation', (await val(p, '#ran
 check('Readout reports complete cancellation', (await text(p, '.readouts')).includes('Complete cancellation'));
 await p.fill('#followup', 'what is the meaning of life');
 await p.press('#followup', 'Enter');
-check('Unsupported follow-up is honest', (await text(p, '.followup-reply')).includes('isn’t connected'));
+check('Unsupported follow-up is honest', (await text(p, '.followup-reply')).includes('built-in actions'));
 
 // Mode switch keeps parameters
 await p.click('.ws-header .mode-option:has-text("Build from basics")');
