@@ -68,6 +68,14 @@ try {
   assert.equal(await chat.locator('.guide-answer img').count(), 0);
   assert.equal(await page.evaluate(() => window.guideXss), undefined);
   await page.screenshot({ path: new URL('./screens/guide-desktop.png', import.meta.url).pathname });
+  const beforeNavigation = await chat.locator('.guide-message').count();
+  await chat.getByLabel('Ask about using Parallax').fill('My unsent guide question');
+  await page.getByRole('button', {name: 'Parallax home', exact: true}).click();
+  await chat.waitFor({state: 'hidden'});
+  await trigger.click();
+  assert.equal(await chat.locator('.guide-message').count(), beforeNavigation);
+  assert.equal(await chat.getByLabel('Ask about using Parallax').inputValue(), 'My unsent guide question');
+  assert.match(await chat.locator('.guide-context').innerText(), /find something to explore/);
   await chat.getByRole('button', { name: 'Browse the library', exact: true }).click();
   await page.waitForFunction(
     () => document.querySelector('.library-toggle')?.getAttribute('aria-expanded') === 'true',
@@ -122,10 +130,9 @@ try {
   await chat.getByRole('button', { name: 'Retry question', exact: true }).click();
   await page.waitForFunction(() => !document.querySelector('.guide-pending'));
   await page.getByRole('button', { name: 'Saved experiments', exact: true }).click();
-  await page.waitForFunction(() => document.querySelector('#parallax-help-dialog')?.matches(':modal'));
-  assert.match(await chat.locator('.guide-context').innerText(), /saved experiments/);
-  await page.keyboard.press('Escape');
+  await chat.waitFor({state: 'hidden'});
   await page.getByRole('button', { name: 'Ask Parallax about saved experiments' }).click();
+  assert.match(await chat.locator('.guide-context').innerText(), /saved experiments/);
   assert.equal(await chat.evaluate((d) => d.matches(':modal')), true);
   await chat.getByRole('button', { name: 'Where are my experiments saved?', exact: true }).click();
   assert.match(await chat.locator('.guide-message.assistant').last().innerText(), /don’t sync/);

@@ -42,6 +42,8 @@ export default function App() {
   const [dialog, setDialog] = useState<'saved' | 'settings' | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  // Navigation dismisses the panel; its mounted component keeps the conversation and draft.
+  useLayoutEffect(() => { setHelpOpen(false); }, [screen, dialog]);
   const helpTrigger = useRef<HTMLElement | null>(null);
   const helpHighlight = useRef<{node: HTMLElement; timer: number} | null>(null);
   const abortRef = useRef<AbortController | null>(null);
